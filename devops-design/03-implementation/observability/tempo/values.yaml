@@ -1,0 +1,93 @@
+# Tempo 分布式追踪存储
+# 用 S3 (MinIO) 持久化
+tempo:
+  storage:
+    trace:
+      backend: s3
+      s3:
+        bucket: tempo-data
+        endpoint: minio.minio.svc.cluster.local:9000
+        access_key: minio
+        secret_key: minio123
+        insecure: true
+      wal:
+        path: /var/tempo/wal
+  receiver:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  distributor:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+            max_recv_msg_size_mib: 10
+  ingester:
+    trace_idle_period: 10s
+    max_block_duration: 5m
+  compactor:
+    compaction:
+      block_retention: 30d
+  querier:
+    frontend_worker:
+      frontend_address: tempo-query-frontend:9095
+  query_frontend:
+    max_outstanding_per_tenant: 2000
+  metricsGenerator:
+    registry:
+      external_labels:
+        source: tempo
+    storage:
+      path: /var/tempo/generator/wal
+
+# 多副本
+distributor:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+ingester:
+  replicas: 3
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+querier:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+queryFrontend:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+# ServiceMonitor
+serviceMonitor:
+  enabled: true

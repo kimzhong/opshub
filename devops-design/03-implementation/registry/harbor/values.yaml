@@ -1,0 +1,136 @@
+# Harbor Helm values
+# 私有镜像仓库：本地 PoC 用简化配置（trivy 内置、PostgreSQL 内置）
+# 生产环境需：
+# - 外置 PostgreSQL（高可用）
+# - 外置 Redis（高可用）
+# - S3 兼容存储（MinIO / 阿里云 OSS / AWS S3）
+# - 多副本 deployment
+expose:
+  type: ingress
+  ingress:
+    hosts:
+      core: harbor.ops.internal
+      notary: notary.ops.internal
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    tls:
+      - secretName: harbor-tls
+        hosts:
+          - harbor.ops.internal
+
+# 持久化 - PoC 用 hostPath，生产用云盘
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+  persistentVolumeClaim:
+    registry:
+      size: 50Gi
+    chartmuseum:
+      size: 5Gi
+    jobservice:
+      size: 1Gi
+    database:
+      size: 1Gi
+    redis:
+      size: 1Gi
+    trivy:
+      size: 5Gi
+
+# 内部 PostgreSQL（PoC），生产用 externalDatabase
+database:
+  internal:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+# 内部 Redis
+redis:
+  internal:
+    enabled: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Trivy 漏洞扫描
+trivy:
+  enabled: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  # 定期更新漏洞库
+  updatePolicy: "Daily"
+
+# 镜像复制（PoC 关闭；生产开启跨 region 复制）
+replicationController:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+
+# 资源限制
+core:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  replicas: 2
+
+portal:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
+  replicas: 2
+
+jobservice:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  replicas: 2
+
+registry:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+  replicas: 2
+
+# Metric 暴露
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: prometheus

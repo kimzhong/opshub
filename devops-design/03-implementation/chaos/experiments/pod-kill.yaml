@@ -1,0 +1,28 @@
+# Chaos Mesh 实验：PodKill
+# 杀一个 Pod，验证 HPA + Service Mesh retry 是否按预期工作
+# Tier 1 实验：每日自动运行
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-kill-checkout-api
+  namespace: chaos-mesh
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - app-checkout-staging
+    labelSelectors:
+      app.kubernetes.io/name: checkout-api
+  # 关键：stop condition（SLO 违规自动停止）
+  duration: "5m"
+  scheduler:
+    cron: "@every 24h"
+  # 关键：SLO 违规时自动 abort
+  abortConditions:
+    - type: SLOBurnRateExceeded
+      key: http_requests_total
+      value: "0.05"  # 错误率 > 5% 时停止
+      duration: "1m"
+  # 实验结束清理
+  cleanCompleted: true

@@ -1,0 +1,279 @@
+# checkout-api K8s 基础资源
+# 严格符合 Pod Security Standards: restricted
+# 符合 Kyverno 准入要求
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app-checkout
+  labels:
+    app.kubernetes.io/name: checkout-api
+    app.kubernetes.io/part-of: opshub
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: checkout-api
+  namespace: app-checkout
+  labels:
+    app.kubernetes.io/name: checkout-api
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-api-config
+  namespace: app-checkout
+data:
+  SERVICE_NAME: "checkout-api"
+  ENVIRONMENT: "dev"
+  # OTLP endpoint 指向 ops-mgmt 的 OTel Collector
+  OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector.observability.svc.cluster.local:4317"
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  OTEL_TRACES_SAMPLER_ARG: "1.0"
+  # 默认 0% 错误率，可通过 Kustomize overlay 调整
+  FAILURE_RATE: "0.0"
+  LATENCY_MS: "0"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: app-checkout
+  labels:
+    app.kubernetes.io/name: checkout-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: opshub
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: checkout-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: checkout-api
+        app.kubernetes.io/component: api
+        app.kubernetes.io/version: v0.1.0
+      annotations:
+        # Prometheus 抓取配置
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+        # OTel SDK 自动注入（如果有 OTel Operator）
+        instrumentation.opentelemetry.io/inject-sdk: "true"
+    spec:
+      serviceAccountName: checkout-api
+      automountServiceAccountToken: false  # 严格模式
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: checkout-api
+          image: harbor.ops.internal/app/checkout-api:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: checkout-api-config
+          env:
+            - name: POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30  # 给 cold start 充分时间
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: checkout-api
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-api
+  namespace: app-checkout
+  labels:
+    app.kubernetes.io/name: checkout-api
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: checkout-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: checkout-api
+  namespace: app-checkout
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: checkout-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Pods
+      pods:
+        metric:
+          name: http_requests_in_flight
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+    scaleUp:
+      stabilizationWindowSeconds: 30
+---
+# 严格 NetworkPolicy - 默认拒绝所有进出，按需开放
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: app-checkout
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  # 留空表示无规则允许 → 等价于 deny all
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress
+  namespace: app-checkout
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: checkout-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: istio-system
+      ports:
+        - port: 8080
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 9090
+          protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress
+  namespace: app-checkout
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: checkout-api
+  policyTypes: [Egress]
+  egress:
+    # 访问 OTel Collector
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - port: 4317
+          protocol: TCP
+    # DNS
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - port: 53
+          protocol: UDP
+    # 业务下游（按需）
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: app-payment
+      ports:
+        - port: 8080
+          protocol: TCP

@@ -1,0 +1,79 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-app-alerts
+  namespace: demo-app
+  labels:
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: demo-app
+      interval: 30s
+      rules:
+        - alert: DemoAppDown
+          expr: up{job="demo-app"} == 0
+          for: 1m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Demo App is down"
+            description: "Demo App has been down for more than 1 minute."
+
+        - alert: DemoAppHighErrorRate
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m])) > 0.05
+          for: 2m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "High error rate on Demo App"
+            description: "Error rate is above 5% for 2 minutes."
+
+        - alert: DemoAppHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "High latency on Demo App"
+            description: "P95 latency above 2s for 5 minutes."
+
+        - alert: DemoAppPodNotReady
+          expr: kube_pod_status_ready{namespace="demo-app",condition="true"} == 0
+          for: 3m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Demo App pod not ready"
+            description: "Pod has been not ready for more than 3 minutes."
+
+        - alert: DemoAppCPUHigh
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace="demo-app"}[5m])) by (pod)
+            / sum(container_spec_cpu_quota{namespace="demo-app"}/container_spec_cpu_period{namespace="demo-app"}) by (pod) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "High CPU usage on Demo App pods"
+
+        - alert: DemoAppMemHigh
+          expr: |
+            sum(container_memory_working_set_bytes{namespace="demo-app"}) by (pod)
+            / sum(container_spec_memory_limit_bytes{namespace="demo-app"}) by (pod) > 0.85
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Memory usage above 85% on Demo App pods"

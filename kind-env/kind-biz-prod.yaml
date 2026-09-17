@@ -1,0 +1,21 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: biz-prod-regiona
+networking:
+  apiServerAddress: "127.0.0.1"
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "node-role=compute,region=a"
+- role: worker
+  labels:
+    node-role: compute
+    region: a
+- role: worker
+  labels:
+    node-role: compute
+    region: a

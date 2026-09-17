@@ -1,0 +1,231 @@
+# Crossplane Compositions: 应用自服务资源
+# 用途：业务团队通过简单 Claim 申请平台管理的中间件
+# 平台团队：维护 Composition + Provider
+# 业务团队：写 XPostgresClaim（甚至不用懂 RDS）
+
+# ===== 1. XRD（Composite Resource Definition）=====
+# 业务团队看到的"产品"
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xpostgresdatabases.opshub.io
+spec:
+  group: opshub.io
+  names:
+    kind: XPostgresDatabase
+    listKind: XPostgresDatabaseList
+    plural: xpostgresdatabases
+    singular: xpostgresdatabase
+  claimNames:
+    kind: PostgresDatabase
+    listKind: PostgresDatabaseList
+    plural: postgresdatabases
+    singular: postgresdatabase
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [size, environment]
+              properties:
+                size:
+                  type: string
+                  enum: [small, medium, large]
+                  description: 数据库规格
+                environment:
+                  type: string
+                  enum: [dev, staging, prod]
+                version:
+                  type: string
+                  default: "16.3"
+                storageGB:
+                  type: integer
+                  default: 20
+                  minimum: 20
+                  maximum: 1000
+                multiAZ:
+                  type: boolean
+                  default: false
+                backupRetentionDays:
+                  type: integer
+                  default: 7
+                # 输出（status）
+                status:
+                  type: object
+                  properties:
+                    endpoint:
+                      type: string
+                    connectionSecret:
+                      type: string
+                    phase:
+                      type: string
+---
+# ===== 2. Composition（XPostgresDatabase 怎么变成真实资源）=====
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xpostgresdatabases.aws
+  labels:
+    provider: aws
+    service: rds
+spec:
+  compositeTypeRef:
+    apiVersion: opshub.io/v1alpha1
+    kind: XPostgresDatabase
+  resources:
+    # 真正的 RDS 实例
+    - name: rdsInstance
+      base:
+        apiVersion: rds.aws.upbound.io/v1beta1
+        kind: Instance
+        spec:
+          forProvider:
+            region: us-east-1
+            dbName: postgres
+            engine: postgres
+            engineVersion: "16.3"
+            instanceClass: db.t3.medium  # 由 patch 覆盖
+            allocatedStorage: 20         # 由 patch 覆盖
+            storageEncrypted: true
+            publiclyAccessible: false
+            multiAZ: false               # 由 patch 覆盖
+            storageType: gp3
+            username: postgres
+            skipFinalSnapshotBeforeDeletion: false
+            deletionProtection: true
+            applyImmediately: true
+            maintenanceWindow: "Mon:00:00-Mon:03:00"
+            backupRetentionPeriod: 7     # 由 patch 覆盖
+            backupWindow: "03:00-06:00"
+            publiclyAccessible: false
+            iamDatabaseAuthenticationEnabled: true
+          writeConnectionSecretToRef:
+            namespace: crossplane
+            name: postgres-conn
+      patches:
+        # 规格映射
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/instanceClass
+              value:
+                small: db.t3.medium
+                medium: db.r6g.large
+                large: db.r6g.xlarge
+        # 存储映射
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/allocatedStorage
+              valueFromCompositeFieldPath: spec.storageGB
+        # 多 AZ
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/multiAZ
+              valueFromCompositeFieldPath: spec.multiAZ
+        # 备份保留
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/backupRetentionPeriod
+              valueFromCompositeFieldPath: spec.backupRetentionDays
+        # 引擎版本
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/engineVersion
+              valueFromCompositeFieldPath: spec.version
+        # 环境标签
+        - type: PatchSet
+          patch:
+            - op: add
+              path: /spec/forProvider/tags/Environment
+              valueFromCompositeFieldPath: spec.environment
+
+    # 写连接信息到 Secret
+    - name: connectionSecret
+      base:
+        apiVersion: kubernetes.crossplane.io/v1alpha1
+        kind: Object
+        spec:
+          forProvider:
+            manifest:
+              apiVersion: v1
+              kind: Secret
+              metadata:
+                name: postgres-conn
+                namespace: crossplane
+              type: Opaque
+              stringData:
+                host: "PLACEHOLDER"
+                port: "5432"
+                username: "PLACEHOLDER"
+                password: "PLACEHOLDER"
+                database: "postgres"
+      patches:
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/manifest/stringData/host
+              valueFromCompositeFieldPath: status.endpoint
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/manifest/stringData/username
+              valueFromCompositeFieldPath: status.connectionInfo.username
+        - type: PatchSet
+          patch:
+            - op: replace
+              path: /spec/forProvider/manifest/stringData/password
+              valueFromCompositeFieldPath: status.connectionInfo.password
+
+    # 网络安全组
+    - name: securityGroup
+      base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroup
+        spec:
+          forProvider:
+            region: us-east-1
+            description: "Allow PostgreSQL access from VPC"
+            ingress:
+              - fromPort: 5432
+                toPort: 5432
+                protocol: TCP
+                cidrBlocks:
+                  - "10.0.0.0/16"  # 限定 VPC 内访问
+                description: "PostgreSQL from VPC"
+
+  # 业务团队看到的 Claim 状态映射
+  status:
+    endpoint: ${rdsInstance.status.endpoint.address}
+    connectionInfo:
+      username: ${rdsInstance.status.connectionInfo.username}
+      password: ${rdsInstance.status.connectionInfo.password}
+    phase: ${rdsInstance.status.conditionStatus}
+---
+# ===== 3. 业务团队使用示例 =====
+# 业务团队只要写：
+# apiVersion: opshub.io/v1alpha1
+# kind: PostgresDatabase
+# metadata:
+#   name: my-app-db
+#   namespace: my-app
+# spec:
+#   size: medium
+#   environment: prod
+#   storageGB: 100
+#   multiAZ: true
+#   backupRetentionDays: 14
+#
+# Crossplane 会自动创建：
+#   - RDS PostgreSQL 实例
+#   - 安全组
+#   - 包含连接信息的 Secret
+# 业务团队不需要懂 AWS 任何细节

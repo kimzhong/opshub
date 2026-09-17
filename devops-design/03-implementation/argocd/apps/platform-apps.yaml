@@ -1,0 +1,115 @@
+# ArgoCD ApplicationSet: platform-apps
+# 管理 ops-mgmt 集群上的所有平台组件
+# 用 list generator 简化本地 PoC
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-apps
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          # 监控栈
+          - name: prometheus
+            namespace: monitoring
+            chart: kube-prometheus-stack
+            repo: https://prometheus-community.github.io/helm-charts
+            version: 60.0.0
+            valuesRef: prometheus-values
+          - name: grafana
+            namespace: monitoring
+            chart: grafana
+            repo: https://grafana.github.io/helm-charts
+            version: 7.2.0
+            valuesRef: grafana-values
+          - name: loki
+            namespace: monitoring
+            chart: loki
+            repo: https://grafana.github.io/helm-charts
+            version: 5.41.0
+            valuesRef: loki-values
+          - name: mimir
+            namespace: monitoring
+            chart: mimir-distributed
+            repo: https://grafana.github.io/helm-charts
+            version: 5.4.0
+            valuesRef: mimir-values
+          - name: tempo
+            namespace: monitoring
+            chart: tempo
+            repo: https://grafana.github.io/helm-charts
+            version: 1.7.0
+            valuesRef: tempo-values
+          - name: alertmanager
+            namespace: monitoring
+            chart: alertmanager
+            repo: https://prometheus-community.github.io/helm-charts
+            version: 1.5.0
+            valuesRef: alertmanager-values
+          # IAM
+          - name: keycloak
+            namespace: keycloak
+            chart: keycloak
+            repo: https://charts.bitnami.com/bitnami
+            version: 24.4.0
+            valuesRef: keycloak-values
+          - name: dex
+            namespace: dex
+            chart: dex
+            repo: https://charts.dexidp.io
+            version: 0.15.0
+            valuesRef: dex-values
+          # 镜像仓库
+          - name: harbor
+            namespace: harbor
+            chart: harbor
+            repo: https://helm.goharbor.io
+            version: 1.15.0
+            valuesRef: harbor-values
+          # 混沌工程
+          - name: chaos-mesh
+            namespace: chaos-mesh
+            chart: chaos-mesh
+            repo: https://charts.chaos-mesh.org
+            version: 2.7.0
+            valuesRef: chaos-mesh-values
+          # 备份
+          - name: velero
+            namespace: velero
+            chart: velero
+            repo: https://vmware-tanzu.github.io/helm-charts
+            version: 5.0.0
+            valuesRef: velero-values
+  template:
+    metadata:
+      name: '{{.name}}'
+      labels:
+        app.kubernetes.io/component: platform
+        app.kubernetes.io/part-of: opshub
+    spec:
+      project: platform
+      source:
+        repoURL: '{{.repo}}'
+        chart: '{{.chart}}'
+        targetRevision: '{{.version}}'
+        helm:
+          valueFiles:
+            - '../../observability/{{.valuesRef}}.yaml'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 1m
+      revisionHistoryLimit: 5

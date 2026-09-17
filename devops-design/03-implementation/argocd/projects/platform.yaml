@@ -1,0 +1,53 @@
+# ArgoCD AppProject: platform
+# 平台组件项目 - 管理 ops-mgmt 上的所有平台组件
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "OpsHub 平台组件 - 运行在 ops-mgmt 集群"
+  # 允许的源代码仓库
+  sourceRepos:
+    - 'https://github.com/argoproj/argocd-example-apps.git'
+    - 'https://charts.bitnami.com/bitnami'
+    - 'https://kubernetes.github.io/ingress-nginx'
+    - 'https://prometheus-community.github.io/helm-charts'
+    - 'https://grafana.github.io/helm-charts'
+    - 'ghcr.io/chaos-mesh/chaos-mesh'
+  # 允许部署的目标
+  destinations:
+    - name: 'in-cluster'  # 只允许部署到 ops-mgmt
+      namespace: '*'
+  # 允许的集群资源类型
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  # 允许的命名空间资源类型
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  # 角色
+  roles:
+    - name: platform-admin
+      description: "平台管理员 - 完全权限"
+      policies:
+        - 'p, proj:platform:platform-admin, applications, *, platform/*, allow'
+        - 'p, proj:platform:platform-admin, exec, *, platform/*, allow'
+      groups:
+        - k8s-platform-admins
+    - name: sre
+      description: "SRE 团队 - 只读"
+      policies:
+        - 'p, proj:platform:sre, applications, get, platform/*, allow'
+      groups:
+        - k8s-sre
+  # Sync 窗口
+  syncWindows:
+    - kind: deny
+      schedule: '0 0 * * 0'  # 周日 0 点禁止（演练时间）
+      duration: 4h
+      applications:
+        - '*-prod'

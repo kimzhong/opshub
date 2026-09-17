@@ -1,0 +1,162 @@
+# OTel Collector 配置
+# 接收所有应用 OTLP 数据 → 路由到 Tempo/Mimir/Loki
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # 接收 Prometheus metrics（从业务集群的 Prometheus remote write）
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'opshub-business'
+          scrape_interval: 30s
+          static_configs:
+            - targets:
+                - 'biz-cluster-prometheus-proxy.monitoring.svc.cluster.local:9090'
+
+  # 接收主机日志（如果用 Promtail/Fluent Bit 推）
+  filelog:
+    include:
+      - /var/log/pods/*/*/*.log
+    exclude:
+      - /var/log/pods/*/kube-system/*.log
+    operators:
+      - type: json_parser
+        id: parser-docker
+        output: extract_metadata_from_filepath
+      - type: regex_parser
+        id: extract_metadata_from_filepath
+        regex: '^.*\/(?P<pod_name>[^_]+)_(?P<pod_namespace>[^_]+)_(?P<container_name>.+)-(?P<container_id>[a-f0-9]{64})\.log$'
+        output: parse_body
+      - type: move
+        from: attributes.log
+        to: body
+        id: parse_body
+      - type: time
+        id: time_parser
+        layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+        parse_from: attributes.time
+
+processors:
+  # 内存限制
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  # 资源属性（注入到所有 signals）
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: production
+        action: upsert
+      - key: opshub.cluster
+        value: ops-mgmt
+        action: upsert
+
+  # 采样
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 100000
+    expected_new_traces_per_sec: 1000
+    policies:
+      - name: errors
+        type: status_code
+        status_code: { status_codes: [ERROR] }
+      - name: slow-traces
+        type: latency
+        latency: { threshold_ms: 1000 }
+      - name: probabilistic-1pct
+        type: probabilistic
+        probabilistic: { sampling_percentage: 1 }
+
+  # 批处理
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+
+  # 资源检测
+  resourcedetection:
+    detectors: [k8s, ec2, gce, azure]
+    timeout: 5s
+
+  # 属性转换
+  transform:
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["deployment.environment"], "production")
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["deployment.environment"], "production")
+
+exporters:
+  # Traces → Tempo
+  otlp/tempo:
+    endpoint: tempo-distributor.monitoring.svc.cluster.local:4317
+    tls:
+      insecure: true
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+
+  # Metrics → Mimir
+  prometheusremotewrite:
+    endpoint: http://mimir-distributor.monitoring.svc.cluster.local:9009/api/v1/push
+    tls:
+      insecure: true
+    resource_to_telemetry_conversion:
+      enabled: true
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      num_consumers: 10
+      queue_size: 5000
+
+  # Logs → Loki
+  loki:
+    endpoint: http://loki-distributor.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    labels:
+      attributes:
+        log.level: level
+        service.name: service
+        k8s.pod.name: pod
+        k8s.namespace.name: namespace
+    timeout: 30s
+
+  # 调试
+  debug:
+    verbosity: basic
+    sampling_initial: 5
+    sampling_thereafter: 200
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, resource, tail_sampling, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, resourcedetection, resource, batch]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [otlp, filelog]
+      processors: [memory_limiter, resourcedetection, resource, batch]
+      exporters: [loki]

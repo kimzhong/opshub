@@ -1,0 +1,48 @@
+# Harbor 项目配置（GitOps 友好）
+# 通过 Terraform 或 kubectl 创建，演示用 kubectl
+# 生产用 Terraform 写进 IaC
+---
+# Platform 项目：存放平台组件镜像
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: harbor-bootstrap
+  namespace: harbor
+  labels:
+    app.kubernetes.io/name: harbor-bootstrap
+data:
+  bootstrap.sh: |
+    #!/bin/bash
+    # Harbor 项目初始化（PoC 用 kubectl 执行）
+    set -euo pipefail
+
+    HARBOR_URL="https://harbor.ops.internal"
+    ADMIN_USER="admin"
+    ADMIN_PASS="${HARBOR_ADMIN_PASSWORD}"
+
+    # 等待 Harbor 可用
+    until curl -sfk "${HARBOR_URL}/api/v2.0/ping" >/dev/null; do
+      echo "Waiting for Harbor..."
+      sleep 5
+    done
+
+    # 创建项目
+    create_project() {
+      local name=$1
+      local public=$2
+      curl -sfk -X POST "${HARBOR_URL}/api/v2.0/projects" \
+        -u "${ADMIN_USER}:${ADMIN_PASS}" \
+        -H "Content-Type: application/json" \
+        -d "{\"project_name\":\"${name}\",\"public\":${public},\"storage_quota\":-1}" \
+        && echo "  ✓ Project ${name} created" \
+        || echo "  - Project ${name} already exists"
+    }
+
+    create_project "platform" false
+    create_project "app"      false
+    create_project "ops"      false
+
+    # 配置 webhook（推送到 Mattermost）
+    # curl -sfk -X POST "${HARBOR_URL}/api/v2.0/projects/app/webhook/policy" ...
+
+    echo "Harbor bootstrap done"

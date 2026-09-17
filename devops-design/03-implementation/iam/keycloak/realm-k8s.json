@@ -1,0 +1,126 @@
+{
+  "realm": "kubernetes",
+  "enabled": true,
+  "sslRequired": "external",
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "bruteForceStrategy": "MULTIPLE",
+  "maxFailureWaitSeconds": 900,
+  "maxLoginFailures": 5,
+  "waitIncrementSeconds": 60,
+  "failureFactor": 30,
+  "accessTokenLifespan": 1800,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digit(1) and specialChars(1)",
+  "eventsEnabled": true,
+  "eventsExpiration": 15552000,
+  "eventsListeners": ["jboss-logging", "metrics-listener"],
+  "enabledEventTypes": [
+    "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
+    "REGISTER", "REGISTER_ERROR",
+    "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+    "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
+    "VALIDATE_LOGIN", "VALIDATE_LOGIN_ERROR"
+  ],
+  "internationalizationEnabled": true,
+  "supportedLocales": ["en", "zh-CN"],
+  "defaultLocale": "en",
+  "roles": {
+    "realm": [
+      { "name": "k8s-platform-admins", "description": "Platform admins" },
+      { "name": "k8s-sre", "description": "SRE team" },
+      { "name": "dev-team-payment", "description": "Payment team developers" },
+      { "name": "dev-team-checkout", "description": "Checkout team developers" },
+      { "name": "k8s-readonly", "description": "Read-only access" }
+    ]
+  },
+  "groups": [
+    { "name": "k8s-platform-admins", "path": "/k8s-platform-admins" },
+    { "name": "k8s-sre", "path": "/k8s-sre" },
+    { "name": "dev-team-payment", "path": "/dev-team-payment" },
+    { "name": "dev-team-checkout", "path": "/dev-team-checkout" },
+    { "name": "k8s-readonly", "path": "/k8s-readonly" }
+  ],
+  "clients": [
+    {
+      "clientId": "kubernetes",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "redirectUris": [
+        "http://localhost:8000",
+        "http://localhost:18000",
+        "https://biz-prod-regiona/*",
+        "https://biz-prod-regionb/*",
+        "https://ops-mgmt/*"
+      ],
+      "webOrigins": ["+"],
+      "attributes": {
+        "oidc.ciba.grant.enabled": "false",
+        "client.secret.creation.time": "1700000000",
+        "backchannel.logout.session.required": "true",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "claim.name": "groups"
+          }
+        },
+        {
+          "name": "preferred-username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "id.token.claim": "true",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "argocd",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "argocd-client-secret-change-me",
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "redirectUris": ["https://argocd.ops.internal/auth/callback"],
+      "webOrigins": ["https://argocd.ops.internal"]
+    },
+    {
+      "clientId": "grafana",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "grafana-client-secret-change-me",
+      "standardFlowEnabled": true,
+      "redirectUris": ["https://grafana.ops.internal/login/generic_oauth"]
+    },
+    {
+      "clientId": "harbor",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "harbor-client-secret-change-me",
+      "standardFlowEnabled": true,
+      "redirectUris": ["https://harbor.ops.internal/c/oidc/callback"]
+    }
+  ]
+}

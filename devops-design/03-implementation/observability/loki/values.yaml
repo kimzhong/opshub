@@ -1,0 +1,98 @@
+# Loki 单体模式 + S3 存储
+# PoC 用 minio（演示），生产用云厂商对象存储
+loki:
+  schemaConfig:
+    configs:
+      - from: 2024-01-01
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+  storage:
+    type: s3
+    s3:
+      endpoint: minio.minio.svc.cluster.local:9000
+      bucketnames: loki-data
+      access_key_id: minio
+      secret_access_key: minio123
+      s3forcepathstyle: true
+      insecure: true
+  commonConfig:
+    replication_factor: 1
+    ring:
+      kvstore:
+        store: inmemory
+  limits_config:
+    retention_period: 30d
+    ingestion_rate_mb: 10
+    ingestion_burst_size_mb: 20
+    max_entries_limit_per_query: 5000
+    max_query_series: 500
+  compactor:
+    working_directory: /loki/compactor
+    compaction_interval: 10m
+    retention_enabled: true
+    retention_delete_delay: 2h
+    delete_request_store: filesystem
+  query_range:
+    results_cache:
+      cache:
+        embedded_cache:
+          enabled: true
+          max_size_mb: 100
+  ruler:
+    alertmanager_url: http://alertmanager-operated.monitoring.svc.cluster.local:9093
+    storage:
+      type: s3
+      s3:
+        bucketnames: loki-ruler
+
+# 多副本（读写分离）
+distributor:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+ingester:
+  replicas: 3
+  persistence:
+    enabled: true
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+querier:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+queryFrontend:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# ServiceMonitor
+serviceMonitor:
+  enabled: true

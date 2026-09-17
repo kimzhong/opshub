@@ -1,0 +1,61 @@
+# ArgoCD AppProject: biz-app
+# 业务应用项目 - 管理 biz-* 集群上的业务应用
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: biz-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: "业务应用 - 运行在 biz-* 集群"
+  sourceRepos:
+    - 'https://github.com/argoproj/argocd-example-apps.git'
+    - 'https://charts.bitnami.com/bitnami'
+    - 'ghcr.io/ops/*'
+  # 允许部署到所有业务集群
+  destinations:
+    - name: 'biz-prod-regiona'
+      server: 'https://kubernetes.default.svc'
+      namespace: 'app-*'
+    - name: 'biz-prod-regionb'
+      server: 'https://kubernetes.default.svc'
+      namespace: 'app-*'
+    - name: 'biz-staging'
+      server: 'https://kubernetes.default.svc'
+      namespace: 'app-*'
+    - name: 'biz-dev'
+      server: 'https://kubernetes.default.svc'
+      namespace: 'app-*'
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  roles:
+    - name: biz-app-admin
+      description: "业务应用管理员"
+      policies:
+        - 'p, proj:biz-app:biz-app-admin, applications, *, biz-app/*, allow'
+      groups:
+        - dev-team-checkout
+        - dev-team-payment
+    - name: biz-app-readonly
+      description: "业务应用只读"
+      policies:
+        - 'p, proj:biz-app:biz-app-readonly, applications, get, biz-app/*, allow'
+      groups:
+        - k8s-readonly
+  # 业务应用 prod 同步窗口：仅工作日 9-18
+  syncWindows:
+    - kind: allow
+      schedule: '0 9 * * 1-5'  # 周一到周五 9 点
+      duration: 9h  # 持续 9 小时
+      applications:
+        - '*-prod'
+    - kind: deny
+      schedule: '* * * * *'
+      duration: 24h
+      applications:
+        - '*-prod'

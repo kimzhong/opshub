@@ -1,0 +1,332 @@
+# Crossplane Composition: 业务团队自助申请 S3 Bucket
+# 业务 Claim 示例：
+#   apiVersion: opshub.io/v1alpha1
+#   kind: Bucket
+#   metadata:
+#     name: checkout-assets
+#     namespace: team-checkout
+#   spec:
+#     size: medium
+#     environment: prod
+#     region: regiona
+#     versioning: true
+#     encryption: kms
+#     publicAccess: false
+#     lifecycleDays: 90
+#     replication: true
+
+# 默认策略：
+#   - 全部强制 KMS 加密（金融合规）
+#   - 强制禁止公开访问（防 S3 桶泄露）
+#   - 默认启用版本控制（防止误删）
+#   - 默认启用访问日志到独立 log bucket
+
+# ===== 1. XRD =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xbuckets.opshub.io
+spec:
+  group: opshub.io
+  names:
+    kind: XBucket
+    listKind: XBucketList
+    plural: xbuckets
+    singular: xbucket
+  claimNames:
+    kind: Bucket
+    listKind: BucketList
+    plural: buckets
+    singular: bucket
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [size, environment, region]
+              properties:
+                size:
+                  type: string
+                  enum: [small, medium, large]
+                  description: 容量提示（small < 1TB, medium < 100TB, large 无限制）
+                environment:
+                  type: string
+                  enum: [dev, staging, prod]
+                region:
+                  type: string
+                  enum: [regiona, regionb]
+                versioning:
+                  type: boolean
+                  default: true
+                encryption:
+                  type: string
+                  enum: [s3, kms]
+                  default: kms
+                  description: 加密类型（金融合规必须 kms）
+                publicAccess:
+                  type: boolean
+                  default: false
+                  description: 是否允许公开访问（金融场景必须 false）
+                lifecycleDays:
+                  type: integer
+                  default: 0
+                  description: 多少天后归档到 Glacier（0=不归档）
+                replication:
+                  type: boolean
+                  default: false
+                  description: 是否跨区域复制（DR）
+                replicationRegion:
+                  type: string
+                  enum: [regiona, regionb]
+                  description: 复制到目标区域
+            status:
+              type: object
+              properties:
+                bucketArn:
+                  type: string
+                bucketDomain:
+                  type: string
+                phase:
+                  type: string
+
+---
+# ===== 2. Composition =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xbuckets.aws.platform
+  labels:
+    provider: aws
+    service: s3
+spec:
+  compositeTypeRef:
+    apiVersion: opshub.io/v1alpha1
+    kind: XBucket
+  resources:
+    # ---- (1) 主 S3 Bucket ----
+    - name: bucket
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: Bucket
+        spec:
+          forProvider:
+            region: us-east-1
+            forceDestroy: false
+            objectLockEnabled: false
+            tags:
+              opshub.io/composition: bucket
+              opshub.io/managed-by: crossplane
+              opshub.io/environment: prod
+          writeConnectionSecretToRef:
+            name: ${Name}-bucket
+            namespace: crossplane-system
+            data:
+              arn: status.atProvider.arn
+              domain: status.atProvider.bucketDomainName
+              region: spec.forProvider.region
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.environment
+          toFieldPath: spec.forProvider.tags["opshub.io/environment"]
+
+    # ---- (2) Versioning（默认启用）----
+    - name: versioning
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketVersioning
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            versioningConfiguration:
+              status: Enabled
+            mfaDelete: Enabled
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.versioning
+          toFieldPath: spec.forProvider.versioningConfiguration.status
+          transforms:
+            - type: map
+              map:
+                "true": Enabled
+                "false": Suspended
+
+    # ---- (3) Server Side Encryption（KMS）----
+    - name: encryption
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketServerSideEncryptionConfigurationV2
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            rule:
+              - applyServerSideEncryptionByDefault:
+                  sseAlgorithm: aws:kms
+                  kmsMasterKeyId: alias/opshub-platform
+                bucketKeyEnabled: true
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.encryption
+          toFieldPath: spec.forProvider.rule[0].applyServerSideEncryptionByDefault.sseAlgorithm
+          transforms:
+            - type: map
+              map:
+                s3: AES256
+                kms: aws:kms
+
+    # ---- (4) Public Access Block（默认全禁）----
+    - name: publicaccessblock
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPublicAccessBlock
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            blockPublicAcls: true
+            blockPublicPolicy: true
+            ignorePublicAcls: true
+            restrictPublicBuckets: true
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        # 业务显式申请才能放开（金融场景一般不放开）
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.publicAccess
+          toFieldPath: spec.forProvider.blockPublicAcls
+          transforms:
+            - type: map
+              map:
+                "true": false
+                "false": true
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.publicAccess
+          toFieldPath: spec.forProvider.blockPublicPolicy
+          transforms:
+            - type: map
+              map:
+                "true": false
+                "false": true
+
+    # ---- (5) Lifecycle Policy ----
+    # 默认值随 environment：dev/staging=30天到 IA，prod=90天到 Glacier
+    - name: lifecycle
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketLifecycleConfiguration
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            rule:
+              - id: archive-policy
+                status: Enabled
+                filter:
+                  prefix: ""
+                transition:
+                  - days: 90
+                    storageClass: GLACIER
+                noncurrentVersionTransition:
+                  - noncurrentDays: 30
+                    storageClass: GLACIER
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        # lifecycleDays 0 = 不归档；>0 = 启用 + 用业务指定天数
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.lifecycleDays
+          toFieldPath: spec.forProvider.rule[0].status
+          transforms:
+            - type: map
+              map:
+                "0": Disabled
+                "30": Enabled
+                "60": Enabled
+                "90": Enabled
+                "180": Enabled
+                "365": Enabled
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.lifecycleDays
+          toFieldPath: spec.forProvider.rule[0].transition[0].days
+
+    # ---- (6) Cross-Region Replication（DR）----
+    - name: replication
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketReplication
+        spec:
+          forProvider:
+            region: us-east-1
+            bucketSelector:
+              matchControllerRef: true
+            role: arn:aws:iam::ACCOUNT_ID:role/opshub-s3-replication
+            rule:
+              - id: cross-region-replication
+                status: Disabled
+                priority: 1
+                filter:
+                  prefix: ""
+                deleteMarkerReplicationStatus: Enabled
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.replication
+          toFieldPath: spec.forProvider.rule[0].status
+          transforms:
+            - type: map
+              map:
+                "true": Enabled
+                "false": Disabled

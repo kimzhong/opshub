@@ -1,0 +1,200 @@
+# Crossplane Composition: 业务团队自助申请 RabbitMQ（使用 Amazon MQ 托管）
+# 业务 Claim 示例：
+#   apiVersion: opshub.io/v1alpha1
+#   kind: RabbitMQCluster
+#   metadata:
+#     name: order-mq
+#     namespace: team-order
+#   spec:
+#     size: medium
+#     environment: prod
+#     region: regiona
+#     rabbitmqVersion: "3.13"
+#     multiAz: true
+
+# 注：Amazon MQ 是 AWS 托管的 RabbitMQ/ActiveMQ 服务，
+# 相比自管 Bitnami RabbitMQ Operator：少运维、有 SLA、自动备份，
+# 代价是单机配置不能太大（broker.m5.large 是上限）和价格略高。
+
+# ===== 1. XRD =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xrabbitmqclusters.opshub.io
+spec:
+  group: opshub.io
+  names:
+    kind: XRabbitMQCluster
+    listKind: XRabbitMQClusterList
+    plural: xrabbitmqclusters
+    singular: xrabbitmqcluster
+  claimNames:
+    kind: RabbitMQCluster
+    listKind: RabbitMQClusterList
+    plural: rabbitmqclusters
+    singular: rabbitmqcluster
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [size, environment, region]
+              properties:
+                size:
+                  type: string
+                  enum: [small, medium, large]
+                  description: 队列规格
+                environment:
+                  type: string
+                  enum: [dev, staging, prod]
+                region:
+                  type: string
+                  enum: [regiona, regionb]
+                rabbitmqVersion:
+                  type: string
+                  default: "3.13"
+                multiAz:
+                  type: boolean
+                  default: false
+                  description: 跨可用区高可用
+                vpcId:
+                  type: string
+                  description: 目标 VPC ID（可选，平台默认值）
+                subnetIds:
+                  type: array
+                  items:
+                    type: string
+                  description: 部署子网
+            status:
+              type: object
+              properties:
+                endpoints:
+                  type: string
+                webConsoleUrl:
+                  type: string
+                phase:
+                  type: string
+
+---
+# ===== 2. Composition =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xrabbitmqclusters.aws.platform
+  labels:
+    provider: aws
+    service: rabbitmq
+spec:
+  compositeTypeRef:
+    apiVersion: opshub.io/v1alpha1
+    kind: XRabbitMQCluster
+  resources:
+    # ---- (1) Amazon MQ Broker ----
+    - name: broker
+      base:
+        apiVersion: mq.aws.upbound.io/v1beta1
+        kind: Broker
+        spec:
+          forProvider:
+            region: us-east-1
+            brokerName: ${Name}
+            engineType: RABBITMQ
+            engineVersion: "3.13"
+            hostInstanceType: mq.t3.micro
+            deploymentMode: SINGLE_INSTANCE
+            publiclyAccessible: false
+            autoMinorVersionUpgrade: true
+            dataReplicationMode: NONE
+            logs:
+              general: true
+            tags:
+              opshub.io/composition: rabbitmq
+              opshub.io/managed-by: crossplane
+          writeConnectionSecretToRef:
+            name: ${Name}-broker
+            namespace: crossplane-system
+            data:
+              endpoints: status.atProvider.amqpEndpoints
+              webConsole: status.atProvider.consoleURL
+              hostInstanceType: spec.forProvider.hostInstanceType
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        # size 映射到 hostInstanceType
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.hostInstanceType
+          transforms:
+            - type: map
+              map:
+                small: mq.t3.micro
+                medium: mq.m5.large
+                large: mq.m5.xlarge
+        # multiAz 控制部署模式
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.multiAz
+          toFieldPath: spec.forProvider.deploymentMode
+          transforms:
+            - type: map
+              map:
+                "true": CLUSTER_MULTI_AZ
+                "false": SINGLE_INSTANCE
+        # multiAz 也会影响数据复制模式
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.multiAz
+          toFieldPath: spec.forProvider.dataReplicationMode
+          transforms:
+            - type: map
+              map:
+                "true": CRDR
+                "false": NONE
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.rabbitmqVersion
+          toFieldPath: spec.forProvider.engineVersion
+
+    # ---- (2) Security Group for AMQP/Management ----
+    - name: securitygroup
+      base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroup
+        spec:
+          forProvider:
+            region: us-east-1
+            namePrefix: ${Name}-rabbitmq-sg
+            description: "Security group for RabbitMQ ${Name}"
+            ingress:
+              - fromPort: 5671
+                toPort: 5671
+                protocol: tcp
+                cidrBlocks:
+                  - 10.0.0.0/8
+                description: "AMQP TLS"
+              - fromPort: 15671
+                toPort: 15671
+                protocol: tcp
+                cidrBlocks:
+                  - 10.0.0.0/8
+                description: "Management UI"
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.forProvider.namePrefix

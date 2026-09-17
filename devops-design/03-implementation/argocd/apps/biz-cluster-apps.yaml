@@ -1,0 +1,90 @@
+# ArgoCD ApplicationSet: biz-cluster-apps
+# 用 cluster generator 管理多业务集群
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: biz-cluster-apps
+  namespace: argocd
+spec:
+  generators:
+    # Cluster generator: 自动发现所有注册的 spoke 集群
+    - clusters:
+        selector:
+          matchExpressions:
+            - key: env
+              operator: In
+              values: [prod, staging, dev]
+        values:
+          replicas: '3'
+  template:
+    metadata:
+      name: 'checkout-api-{{nameNormalized}}'
+      labels:
+        app.kubernetes.io/name: checkout-api
+        app.kubernetes.io/instance: '{{nameNormalized}}'
+        app.kubernetes.io/part-of: opshub
+    spec:
+      project: biz-app
+      source:
+        repoURL: https://github.com/ops/opshub-app-checkout-api.git
+        targetRevision: main
+        path: deploy/overlays/prod
+      destination:
+        name: '{{name}}'
+        namespace: app-checkout
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - PrunePropagationPolicy=foreground
+        retry:
+          limit: 5
+          backoff:
+            duration: 10s
+            factor: 2
+            maxDuration: 5m
+      # 健康检查覆盖
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/replicas
+      revisionHistoryLimit: 10
+---
+# 第二个 ApplicationSet: staging 环境（自动用 staging overlay）
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: biz-cluster-staging
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchExpressions:
+            - key: env
+              operator: In
+              values: [staging]
+        values:
+          replicas: '1'
+  template:
+    metadata:
+      name: 'checkout-api-staging-{{nameNormalized}}'
+    spec:
+      project: biz-app
+      source:
+        repoURL: https://github.com/ops/opshub-app-checkout-api.git
+        targetRevision: main
+        path: deploy/overlays/staging
+      destination:
+        name: '{{name}}'
+        namespace: app-checkout-staging
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+      revisionHistoryLimit: 5

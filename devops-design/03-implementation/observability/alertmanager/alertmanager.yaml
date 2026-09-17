@@ -1,0 +1,82 @@
+# Alertmanager 配置
+# 核心：基于 SLO burn rate 的多窗口告警 + 路由规则
+global:
+  resolve_timeout: 5m
+  # SMTP 邮件（生产配真实 SMTP）
+  smtp_smarthost: 'smtp.ops.internal:587'
+  smtp_from: 'alertmanager@ops.internal'
+  smtp_require_tls: true
+
+# 模板
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# 路由树
+route:
+  receiver: 'default'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # P0 严重 → on-call 立即响应
+    - matchers:
+        - severity = "critical"
+      receiver: 'pagerduty-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+      continue: true
+    # 业务服务 warning
+    - matchers:
+        - severity = "warning"
+        - service =~ "checkout|payment|user|inventory"
+      receiver: 'slack-business'
+    # 平台组件 warning
+    - matchers:
+        - severity = "warning"
+      receiver: 'slack-platform'
+    # info → 静默只记录
+    - matchers:
+        - severity = "info"
+      receiver: 'default'
+
+# 抑制规则 - critical 触发时 warning 抑制
+inhibit_rules:
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ['alertname', 'cluster', 'service']
+
+# 接收人
+receivers:
+  - name: 'default'
+    webhook_configs:
+      - url: 'http://mattermost.monitoring:8066/hooks/alertmanager'
+        send_resolved: true
+
+  - name: 'pagerduty-critical'
+    pagerduty_configs:
+      - routing_key: 'pagerduty-integration-key-change-me'
+        description: '{{ .CommonAnnotations.summary }}'
+        details:
+          - firing: '{{ .Alerts.Firing | len }}'
+          - resolved: '{{ .Alerts.Resolved | len }}'
+          - cluster: '{{ .CommonLabels.cluster }}'
+          - service: '{{ .CommonLabels.service }}'
+
+  - name: 'slack-business'
+    slack_configs:
+      - api_url: 'https://mattermost.ops.internal/hooks/alertmanager-business'
+        channel: '#alerts-business'
+        title: '{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+        text: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true
+
+  - name: 'slack-platform'
+    slack_configs:
+      - api_url: 'https://mattermost.ops.internal/hooks/alertmanager-platform'
+        channel: '#alerts-platform'
+        title: '{{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.summary }}'
+        send_resolved: true

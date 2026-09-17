@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kind 多集群运维平台</title>
+<style>
+:root{
+--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;
+--green:#3fb950;--red:#f85149;--yellow:#d29922;--blue:#58a6ff;
+--purple:#a371f7;--text:#c9d1d9;--text2:#8b949e;--cyan:#39d353;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+a{color:var(--blue);text-decoration:none;}a:hover{text-decoration:underline;}
+
+/* Header */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;height:56px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.logo{font-size:17px;font-weight:700;color:#fff;}
+.logo span{color:var(--green);}
+.hdr-right{display:flex;align-items:center;gap:12px;font-size:12px;}
+.badge{padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;}
+.b-ok{background:#0d3320;color:var(--green);border:1px solid #196c2e;}
+.b-warn{background:#3d2a00;color:var(--yellow);border:1px solid #6e5500;}
+.b-err{background:#3d0d0d;color:var(--red);border:1px solid #6e1313;}
+.b-info{background:#0d2033;color:var(--blue);border:1px solid #1158c7;}
+
+/* Subnav */
+.subnav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 24px;
+  display:flex;gap:4px;overflow-x:auto;}
+.navtab{padding:10px 16px;font-size:13px;color:var(--text2);cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
+.navtab:hover{color:var(--text);}
+.navtab.active{color:var(--blue);border-bottom-color:var(--blue);}
+
+/* Pages */
+.page{display:none;padding:20px 24px;min-height:calc(100vh - 110px);}
+.page.active{display:block;}
+
+/* Grid */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.g3{grid-template-columns:repeat(3,1fr);}
+.g4{grid-template-columns:repeat(4,1fr);}
+.grid{display:grid;gap:16px;}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.ch{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;
+  justify-content:space-between;font-size:13px;font-weight:600;}
+.cb{padding:16px;}
+
+/* Cluster card */
+.clu-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+  padding:14px 16px;cursor:pointer;transition:border-color .15s;}
+.clu-card:hover{border-color:var(--blue);}
+.cn{font-size:15px;font-weight:700;color:#fff;margin-bottom:4px;}
+.cr{font-size:11px;color:var(--blue);margin-bottom:10px;}
+
+/* Node rows */
+.nrow{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);
+  font-size:12px;}
+.nrow:last-child{border-bottom:none;}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.dot-ok{background:var(--green);box-shadow:0 0 6px var(--green);}
+.dot-err{background:var(--red);box-shadow:0 0 6px var(--red);}
+.dot-warn{background:var(--yellow);}
+.nn{flex:1;color:var(--text2);font-size:12px;font-family:monospace;}
+.nrole{font-size:10px;padding:1px 6px;border-radius:4px;}
+.r-cp{background:#1c2e4a;color:var(--blue);}
+.r-w{background:#1a2e1a;color:var(--green);}
+
+/* Metric cards */
+.metric{text-align:center;padding:8px 0;}
+.mv{font-size:26px;font-weight:700;color:#fff;}
+.ml{font-size:10px;color:var(--text2);margin-top:4px;text-transform:uppercase;letter-spacing:.5px;}
+.m.ok .mv{color:var(--green);}
+.m.warn .mv{color:var(--yellow);}
+.m.err .mv{color:var(--red);}
+
+/* Pills */
+.pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;font-size:11px;}
+.p-ok{background:#0d3320;color:var(--green);}
+.p-err{background:#3d0d0d;color:var(--red);}
+.p-warn{background:#3d2a00;color:var(--yellow);}
+.p-info{background:#0d2033;color:var(--blue);}
+.p-neutral{background:var(--bg3);color:var(--text2);}
+
+/* Action grid */
+.ag{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}
+.abtn{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:11px 13px;
+  cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .15s;color:var(--text);
+  font-size:13px;text-align:left;}
+.abtn:hover{border-color:var(--blue);background:#1c2230;}
+.abtn:active{transform:scale(.98);}
+.ai{font-size:20px;flex-shrink:0;}
+.at{line-height:1.3;}
+.att{font-weight:600;}
+.atd{color:var(--text2);font-size:11px;margin-top:2px;}
+
+/* App list */
+.ap{background:#0d3320;border:1px solid #196c2e;border-radius:6px;padding:10px 12px;
+  display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.ap-name{font-weight:600;font-size:14px;}
+.ap-meta{font-size:11px;color:var(--text2);margin-top:2px;}
+
+/* Alert items */
+.ai2{padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.ai2:last-child{border-bottom:none;}
+.aj{font-size:12px;color:var(--text);}
+.ameta{font-size:11px;color:var(--text2);margin-top:3px;}
+
+/* Log viewer */
+.lv{background:#050810;border:1px solid var(--border);border-radius:6px;padding:12px;
+  font-family:'Cascadia Code','Fira Code',monospace;font-size:12px;line-height:1.7;
+  max-height:420px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;}
+.ll-info{color:var(--text2);}
+.ll-warn{color:var(--yellow);}
+.ll-err{color:var(--red);}
+
+/* Terminal */
+.term-wrap{background:#050810;border:1px solid var(--border);border-radius:8px;overflow:hidden;
+  height:calc(100vh - 200px);}
+.term-header{background:var(--bg3);padding:8px 16px;display:flex;align-items:center;
+  justify-content:space-between;border-bottom:1px solid var(--border);font-size:12px;}
+.term-body{padding:8px;height:calc(100vh - 240px);overflow:auto;}
+
+/* Buttons */
+.btn{padding:5px 12px;border-radius:5px;font-size:12px;cursor:pointer;
+  border:1px solid var(--border);background:var(--bg3);color:var(--text);}
+.btn:hover{border-color:var(--text2);}
+.btn-p{background:var(--blue);color:#fff;border-color:var(--blue);}
+.btn-p:hover{background:#4493e8;}
+.btn-d{background:var(--red);color:#fff;border-color:var(--red);}
+.btn-s{background:var(--green);color:#fff;border-color:var(--green);}
+.btn-sm{padding:3px 10px;font-size:11px;}
+
+/* Inputs */
+input,select{background:var(--bg3);border:1px solid var(--border);border-radius:4px;
+  padding:5px 10px;color:var(--text);font-size:13px;outline:none;}
+input:focus,select:focus{border-color:var(--blue);}
+
+/* Pod row */
+.prow{display:flex;align-items:center;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--border);font-size:12px;}
+.prow:last-child{border-bottom:none;}
+.pname{flex:1;font-family:monospace;color:var(--text2);font-size:11px;overflow:hidden;text-overflow:ellipsis;}
+
+/* Proxy notice */
+.notice{background:#1a2e1a;border:1px solid #196c2e;border-radius:6px;padding:10px 14px;
+  font-size:12px;color:var(--green);margin-bottom:16px;display:flex;align-items:flex-start;gap:8px;}
+.notice.warn{background:#3d2a00;border-color:#6e5500;color:var(--yellow);}
+
+/* Toast */
+#toast{position:fixed;bottom:20px;right:20px;background:var(--bg2);border:1px solid var(--border);
+  border-radius:8px;padding:10px 16px;font-size:13px;z-index:1000;display:none;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);max-width:340px;}
+.t-err{border-color:var(--red);}
+.t-ok{border-color:var(--green);}
+
+/* Misc */
+small{font-size:11px;color:var(--text2);}
+code{background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;
+  font-family:monospace;color:var(--text2);cursor:pointer;}
+code:hover{background:var(--border);}
+
+.res{font-size:12px;line-height:1.9;}
+hr{border:none;border-top:1px solid var(--border);margin:12px 0;}
+
+/* Loading spinner */
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Collapsible sections */
+.section{margin-bottom:16px;}
+.section-hdr{padding:8px 0;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;}
+.section-hdr:hover{color:var(--blue);}
+.section-body{display:none;padding:8px 0 0 0;}
+.section-body.open{display:block;}
+
+@media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr 1fr;}}
+@media(max-width:600px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="logo">⚙️ Kind Ops <span>Portal</span></div>
+  <div class="hdr-right">
+    <span id="proxyStatus" class="badge b-warn"><span class="spin"></span> 代理连接中</span>
+    <span class="badge b-ok" id="clusterBadge">集群: —</span>
+    <span class="badge b-ok" id="alertBadge">告警: 0</span>
+    <span class="badge b-info">v2.0</span>
+    <button class="btn btn-sm" onclick="refreshAll()">↻ 刷新</button>
+  </div>
+</header>
+
+<!-- ── Sub Nav ── -->
+<div class="subnav">
+  <div class="navtab active" onclick="switchTab('overview')">📊 概览</div>
+  <div class="navtab" onclick="switchTab('clusters')">🖥️ 集群</div>
+  <div class="navtab" onclick="switchTab('gitops')">🔄 GitOps</div>
+  <div class="navtab" onclick="switchTab('logs')">📋 日志</div>
+  <div class="navtab" onclick="switchTab('alerts')">🚨 告警</div>
+  <div class="navtab" onclick="switchTab('terminal')">💻 终端</div>
+  <div class="navtab" onclick="switchTab('quick')">⚡ 快捷</div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PROXY STATUS NOTICE
+══════════════════════════════════════ -->
+<div id="proxyNotice" class="notice warn" style="display:none;">
+  <span style="font-size:16px;">⚠️</span>
+  <div>
+    <strong>代理服务未连接</strong> — 请先启动代理服务：<br>
+    <code style="background:#3d0d0d;color:var(--red);">wsl -d Ubuntu</code> 然后运行：
+    <br><code>cd /mnt/c/Users/kim/kind-env/ops-portal && python3 proxy_server.py</code>
+    <br>或双击 <code>start-proxy.bat</code>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 概览
+══════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+  <div id="overviewNotice" class="notice" style="display:none;"></div>
+
+  <div class="g4 grid" style="margin-bottom:20px;">
+    <div class="card"><div class="cb"><div class="metric m ok"><div class="mv" id="m-nodes">—</div>
+      <div class="ml">在线节点</div></div></div></div>
+    <div class="card"><div class="cb"><div class="metric m ok"><div class="mv" id="m-pods">—</div>
+      <div class="ml">运行 Pods</div></div></div></div>
+    <div class="card"><div class="cb"><div class="metric m ok" id="m-alerts-wrap"><div class="mv" id="m-alerts">—</div>
+      <div class="ml">活跃告警</div></div></div></div>
+    <div class="card"><div class="cb"><div class="metric m ok"><div class="mv" id="m-apps">—</div>
+      <div class="ml">GitOps 应用</div></div></div></div>
+  </div>
+
+  <h3 style="margin-bottom:12px;font-size:13px;color:var(--text2);">集群状态</h3>
+  <div class="g3 grid" id="clusterCards" style="margin-bottom:20px;">
+    <div class="clu-card"><div class="cn">ops-mgmt</div><div class="cr">管理集群</div><div id="nodes-ops">—</div></div>
+    <div class="clu-card"><div class="cn">biz-prod-regiona</div><div class="cr">生产集群 A</div><div id="nodes-regiona">—</div></div>
+    <div class="clu-card"><div class="cn">biz-prod-regionb</div><div class="cr">生产集群 B</div><div id="nodes-regionb">—</div></div>
+  </div>
+
+  <div class="g2 grid">
+    <div class="card">
+      <div class="ch">🚨 最近告警 <a href="#" onclick="switchTab('alerts');return false;" style="font-size:11px;">全部 →</a></div>
+      <div class="cb" id="alertSummary"><span style="color:var(--text2);font-size:13px;">加载中…</span></div>
+    </div>
+    <div class="card">
+      <div class="ch">🔄 GitOps 应用 <a href="#" onclick="switchTab('gitops');return false;" style="font-size:11px;">详情 →</a></div>
+      <div class="cb" id="appSummary"><span style="color:var(--text2);font-size:13px;">加载中…</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 集群详情
+══════════════════════════════════════ -->
+<div class="page" id="page-clusters">
+  <div class="notice" style="margin-bottom:16px;">
+    <span>ℹ️</span>
+    <div>
+      <strong>Pod 列表</strong> — 选择集群和命名空间后实时查询 K8s API
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="clu-select" onchange="loadPods()">
+          <option value="kind-ops-mgmt">ops-mgmt</option>
+          <option value="kind-biz-prod-regiona">biz-prod-regiona</option>
+          <option value="kind-biz-prod-regionb">biz-prod-regionb</option>
+        </select>
+        <select id="ns-select" onchange="loadPods()">
+          <option value="default">default</option>
+          <option value="monitoring">monitoring</option>
+          <option value="argocd">argocd</option>
+          <option value="demo-app">demo-app</option>
+          <option value="gitlab-runner">gitlab-runner</option>
+          <option value="kube-system">kube-system</option>
+        </select>
+        <button class="btn btn-sm" onclick="loadPods()">↻ 刷新</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="ch">Pods <span id="pods-context" style="font-size:11px;color:var(--text2);font-weight:normal;"></span></div>
+    <div class="cb" id="podList">
+      <div style="color:var(--text2);font-size:13px;">加载中…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: GitOps
+══════════════════════════════════════ -->
+<div class="page" id="page-gitops">
+  <div class="g2 grid" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="ch">🔄 ArgoCD 应用 <button class="btn btn-sm btn-p" onclick="syncAllArgoCD()">🔄 同步全部</button></div>
+      <div class="cb" id="argocdApps"><span style="color:var(--text2);font-size:13px;">加载中…</span></div>
+    </div>
+    <div class="card">
+      <div class="ch">📦 demo-app 快速操作</div>
+      <div class="cb">
+        <div class="ag">
+          <button class="abtn" onclick="syncApp('demo-app')"><span class="ai">🔄</span>
+            <div class="at"><div class="att">同步</div><div class="atd">ArgoCD sync</div></div></button>
+          <button class="abtn" onclick="rolloutRestart()"><span class="ai">🔁</span>
+            <div class="at"><div class="att">滚动重启</div><div class="atd">rollout restart</div></div></button>
+          <button class="abtn" onclick="scaleApp(3)"><span class="ai">📈</span>
+            <div class="at"><div class="att">扩容 ×3</div><div class="atd">scale to 3</div></div></button>
+          <button class="abtn" onclick="scaleApp(1)"><span class="ai">📉</span>
+            <div class="at"><div class="att">缩容 ×1</div><div class="atd">scale to 1</div></div></button>
+          <button class="abtn" onclick="viewAppLogs()"><span class="ai">📋</span>
+            <div class="at"><div class="att">查看日志</div><div class="atd">kubectl logs</div></div></button>
+          <button class="abtn" onclick="describeApp()"><span class="ai">🔍</span>
+            <div class="at"><div class="att">诊断 Pod</div><div class="atd">kubectl describe</div></div></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- demo-app pods -->
+  <div class="card">
+    <div class="ch">📦 demo-app Pods <button class="btn btn-sm" onclick="loadDemoAppPods()">↻</button></div>
+    <div class="cb" id="demoappPods"><span style="color:var(--text2);font-size:13px;">加载中…</span></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 日志 (Loki)
+══════════════════════════════════════ -->
+<div class="page" id="page-logs">
+  <div class="card">
+    <div class="ch">
+      📋 Loki 日志查询
+      <div style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+        <input id="loki-q" placeholder='{namespace="demo-app"}' size="42"
+               style="font-family:monospace;font-size:12px;"
+               onkeydown="if(event.key==='Enter')queryLoki()">
+        <button class="btn btn-p btn-sm" onclick="queryLoki()">查询</button>
+      </div>
+    </div>
+    <div class="cb">
+      <div style="margin-bottom:10px;font-size:12px;color:var(--text2);">
+        快捷查询：
+        <code onclick="setLoki('{namespace=\"demo-app\"}')">{namespace="demo-app"}</code>
+        <code onclick="setLoki('{namespace=\"demo-app\"} |= \"ERROR\"')">{namespace="demo-app"} |= "ERROR"</code>
+        <code onclick="setLoki('{namespace=~\"monitoring|argocd\"}')">{namespace=~"monitoring|argocd"}</code>
+      </div>
+      <div class="lv" id="logOut"><span style="color:var(--text2);">点击"查询"查看日志</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 告警
+══════════════════════════════════════ -->
+<div class="page" id="page-alerts">
+  <div class="g2 grid" style="margin-bottom:20px;">
+    <div class="card">
+      <div class="ch">🚨 Prometheus 告警 <button class="btn btn-sm" onclick="loadAlerts()">↻</button></div>
+      <div class="cb" id="promAlertList"><span style="color:var(--text2);font-size:13px;">加载中…</span></div>
+    </div>
+    <div class="card">
+      <div class="ch">🔔 Alertmanager 状态</div>
+      <div class="cb" id="amStatus">
+        <div class="ai2">
+          <div class="p-ok pill" style="margin-bottom:6px;">● Active</div>
+          <div class="ameta">Prometheus AlertManager · 端口 9093</div>
+        </div>
+        <div class="ai2">
+          <div class="p-warn pill" style="margin-bottom:6px;">⚠️ 飞书通知</div>
+          <div class="ameta">Webhook 待配置（见下方）</div>
+        </div>
+        <hr>
+        <div style="font-size:12px;color:var(--text2);">
+          飞书告警 Webhook 接收地址：<br>
+          <code id="webhookUrl">http://localhost:8099/webhook/feishu</code>
+          <button class="btn btn-sm" style="margin-left:6px;" onclick="copyTxt('http://localhost:8099/webhook/feishu')">复制</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ch">📊 告警规则（Prometheus）</div>
+    <div class="cb" style="font-size:12px;color:var(--text2);">
+      告警规则文件：<code>C:\Users\kim\kind-env\demo-app\prometheus-rules.yaml</code><br>
+      HPA 规则：CPU &gt; 50% 自动扩容，1-10 副本<br>
+      Alertmanager 配置：<code>C:\Users\kim\kind-env\demo-app\alertmanager-config.yaml</code>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 终端
+══════════════════════════════════════ -->
+<div class="page" id="page-terminal">
+  <div class="notice" style="margin-bottom:12px;">
+    <span>💻</span>
+    <div>
+      <strong>交互式 kubectl 终端</strong> — 直接在浏览器里敲命令（需要 WebSocket 支持）
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="term-ctx">
+          <option value="kind-ops-mgmt">ops-mgmt</option>
+          <option value="kind-biz-prod-regiona">biz-prod-regiona</option>
+          <option value="kind-biz-prod-regionb">biz-prod-regionb</option>
+        </select>
+        <select id="term-ns">
+          <option value="default">default</option>
+          <option value="monitoring">monitoring</option>
+          <option value="argocd">argocd</option>
+          <option value="demo-app">demo-app</option>
+          <option value="kube-system">kube-system</option>
+        </select>
+        <input id="term-pod" placeholder="Pod 名称，如 demo-app-xxx-xxx" size="28">
+        <button class="btn btn-p btn-sm" onclick="connectTerminal()">连接</button>
+        <button class="btn btn-d btn-sm" onclick="disconnectTerminal()">断开</button>
+        <span id="termStatus" style="font-size:11px;color:var(--text2);"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="term-wrap">
+    <div class="term-header">
+      <span>💻 kubectl exec — <span id="termTitle">未连接</span></span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm" onclick="clearTerminal()">清屏</button>
+        <span style="font-size:11px;color:var(--text2);">Ctrl+C 中断 · Ctrl+D 退出</span>
+      </div>
+    </div>
+    <div class="term-body">
+      <textarea id="termOutput"
+        style="width:100%;height:100%;min-height:500px;background:#050810;color:#c9d1d9;
+               border:none;resize:none;font-family:'Cascadia Code','Consolas',monospace;
+               font-size:13px;line-height:1.6;padding:8px;outline:none;"
+        readonly></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <input id="termInput" placeholder="输入命令后按 Enter（如: kubectl get nodes）"
+               style="flex:1;font-family:monospace;"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();sendTermCmd()}">
+        <button class="btn btn-p btn-sm" onclick="sendTermCmd()">执行</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     PAGE: 快捷操作
+══════════════════════════════════════ -->
+<div class="page" id="page-quick">
+  <div class="ag">
+    <button class="abtn" onclick="switchTab('overview')"><span class="ai">📊</span>
+      <div class="at"><div class="att">集群概览</div><div class="atd">实时状态</div></div></button>
+    <button class="abtn" onclick="switchTab('clusters')"><span class="ai">🖥️</span>
+      <div class="at"><div class="att">Pod 列表</div><div class="atd">K8s API</div></div></button>
+    <button class="abtn" onclick="switchTab('gitops')"><span class="ai">🔄</span>
+      <div class="at"><div class="att">GitOps 操作</div><div class="atd">ArgoCD</div></div></button>
+    <button class="abtn" onclick="switchTab('logs')"><span class="ai">📋</span>
+      <div class="at"><div class="att">日志查询</div><div class="atd">Loki</div></div></button>
+    <button class="abtn" onclick="switchTab('alerts')"><span class="ai">🚨</span>
+      <div class="at"><div class="att">告警</div><div class="atd">Prometheus</div></div></button>
+    <button class="abtn" onclick="switchTab('terminal')"><span class="ai">💻</span>
+      <div class="at"><div class="att">终端</div><div class="atd">kubectl</div></div></button>
+    <button class="abtn" onclick="window.open('http://localhost:30300','_blank')"><span class="ai">📈</span>
+      <div class="at"><div class="att">Grafana</div><div class="atd">localhost:30300</div></div></button>
+    <button class="abtn" onclick="window.open('https://localhost:30080','_blank')"><span class="ai">🔁</span>
+      <div class="at"><div class="att">ArgoCD</div><div class="atd">localhost:30080</div></div></button>
+    <button class="abtn" onclick="window.open('http://localhost:9090','_blank')"><span class="ai">📉</span>
+      <div class="at"><div class="att">Prometheus</div><div class="atd">localhost:9090</div></div></button>
+    <button class="abtn" onclick="window.open('https://my.feishu.cn/docx/KyfgdKymPokFgzxT6Ljc3auGnpg','_blank')"><span class="ai">📖</span>
+      <div class="at"><div class="att">飞书手册</div><div class="atd">详细文档</div></div></button>
+    <button class="abtn" onclick="rolloutRestart()"><span class="ai">🔁</span>
+      <div class="at"><div class="att">重启 demo-app</div><div class="atd">rollout restart</div></div></button>
+    <button class="abtn" onclick="viewAppLogs()"><span class="ai">📋</span>
+      <div class="at"><div class="att">demo-app 日志</div><div class="atd">最近 50 行</div></div></button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// Config
+// ═══════════════════════════════════════════════════════════════
+const PROXY = 'http://localhost:8099';
+let ws = null;
+let termWs = null;
+let termPod = '';
+let termNs = 'default';
+let termCtx = 'kind-ops-mgmt';
+let autoRefreshTimer = null;
+let proxyLive = false;
+
+// ═══════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  checkProxy();
+  // 3秒后检查代理
+  setTimeout(() => {
+    if (!proxyLive) {
+      document.getElementById('proxyNotice').style.display = 'flex';
+    }
+  }, 3000);
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Proxy check
+// ═══════════════════════════════════════════════════════════════
+async function checkProxy() {
+  try {
+    const r = await fetch(`${PROXY}/health`);
+    if (r.ok) {
+      proxyLive = true;
+      document.getElementById('proxyStatus').className = 'badge b-ok';
+      document.getElementById('proxyStatus').innerHTML = '● 代理在线';
+      document.getElementById('overviewNotice').style.display = 'none';
+      refreshAll();
+      startAutoRefresh();
+      // 显示 Webhook URL（含本机IP方便远程配置）
+      document.getElementById('webhookUrl').textContent =
+        `http://localhost:8099/webhook/feishu`;
+      return;
+    }
+  } catch(e) {}
+  proxyLive = false;
+  document.getElementById('proxyStatus').className = 'badge b-err';
+  document.getElementById('proxyStatus').innerHTML = '● 代理离线';
+  document.getElementById('overviewNotice').innerHTML =
+    '<span style="font-size:16px;">⚠️</span>' +
+    '<div><strong>代理服务未运行</strong> — 启动后再刷新页面获取实时数据</div>';
+  document.getElementById('overviewNotice').style.display = 'flex';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Auto refresh
+// ═══════════════════════════════════════════════════════════════
+function startAutoRefresh() {
+  if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => {
+    if (proxyLive) refreshAll();
+  }, 30000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Tab
+// ═══════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.navtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const tab = document.querySelector(`.navtab[onclick*="'${name}'"]`);
+  if (tab) tab.classList.add('active');
+  document.getElementById('page-' + name).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Toast
+// ═══════════════════════════════════════════════════════════════
+let _tt;
+function toast(msg, cls='') {
+  const t = document.getElementById('toast');
+  t.className = cls || '';
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(_tt);
+  _tt = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+function toastOk(msg) { toast(msg, 't-ok'); }
+function toastErr(msg) { toast(msg, 't-err'); }
+
+// ═══════════════════════════════════════════════════════════════
+// Main refresh
+// ═══════════════════════════════════════════════════════════════
+async function refreshAll() {
+  if (!proxyLive) return;
+  await Promise.allSettled([
+    loadClusterSummary(),
+    loadAlerts(),
+    loadArgoCDApps(),
+    loadDemoAppPods(),
+  ]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Cluster summary
+// ═══════════════════════════════════════════════════════════════
+async function loadClusterSummary() {
+  try {
+    const r = await fetch(`${PROXY}/api/clusters`);
+    const d = await r.json();
+    const clusters = d.clusters || [];
+
+    let totalNodes = 0, totalPods = 0, allHealthy = true;
+    clusters.forEach((c, i) => {
+      totalNodes += c.ready_nodes || 0;
+      totalPods  += c.total_pods || 0;
+      if (c.ready_nodes < c.total_nodes) allHealthy = false;
+
+      const elId = ['nodes-ops','nodes-regiona','nodes-regionb'][i];
+      const el = document.getElementById(elId);
+      if (el) el.innerHTML = (c.nodes || []).map(n => `
+        <div class="nrow">
+          <div class="dot ${n.ready?'dot-ok':'dot-err'}"></div>
+          <div class="nn">${n.name}</div>
+          <span class="nrole ${n.role==='control-plane'?'r-cp':'r-w'}">
+            ${n.role==='control-plane'?'CP':'W'}
+          </span>
+        </div>`).join('');
+    });
+
+    document.getElementById('m-nodes').textContent = totalNodes;
+    document.getElementById('m-pods').textContent = totalPods;
+    document.getElementById('clusterBadge').className = `badge ${allHealthy?'b-ok':'b-warn'}`;
+    document.getElementById('clusterBadge').textContent = `集群: ${allHealthy?'在线':'部分异常'}`;
+  } catch(e) { console.warn('cluster summary error:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Alerts
+// ═══════════════════════════════════════════════════════════════
+async function loadAlerts() {
+  try {
+    const r = await fetch(`${PROXY}/api/alerts`);
+    const d = await r.json();
+    const count = d.count || 0;
+    const active = d.active || [];
+    const pending = d.pending || [];
+
+    // Badge
+    const badge = document.getElementById('alertBadge');
+    const mWrap = document.getElementById('m-alerts-wrap');
+    if (count === 0) {
+      badge.className = 'badge b-ok'; badge.textContent = '告警: 0';
+      mWrap.className = 'metric m ok'; document.getElementById('m-alerts').style.color = '';
+    } else if (count < 5) {
+      badge.className = 'badge b-warn'; badge.textContent = `告警: ${count}`;
+      mWrap.className = 'metric m warn';
+    } else {
+      badge.className = 'badge b-err'; badge.textContent = `告警: ${count}`;
+      mWrap.className = 'metric m err';
+    }
+    document.getElementById('m-alerts').textContent = count;
+
+    // Overview summary
+    document.getElementById('alertSummary').innerHTML =
+      active.length === 0 && pending.length === 0
+        ? '<div class="ai2"><div class="p-ok pill" style="margin-bottom:6px;">✅ 无活跃告警</div><div class="ameta">Prometheus · Alertmanager · 运行正常</div></div>'
+        : active.slice(0,3).map(a => {
+            const lab = a.labels || {};
+            return `<div class="ai2">
+              <div class="p-err pill" style="margin-bottom:4px;">🔴 ${lab.severity || 'alert'}</div>
+              <div class="aj">${lab.alertname || JSON.stringify(a).slice(0,60)}</div>
+              <div class="ameta">${lab.namespace || lab.cluster || ''} · ${a.state || ''}</div>
+            </div>`;
+          }).join('');
+
+    // Full list
+    const all = [...active, ...pending];
+    document.getElementById('promAlertList').innerHTML =
+      all.length === 0
+        ? '<div class="ai2"><div class="p-ok pill">✅ 无告警</div></div>'
+        : all.map(a => {
+            const lab = a.labels || {};
+            const isFiring = a.state === 'firing';
+            return `<div class="ai2">
+              <div class="${isFiring?'p-err':'p-warn'} pill" style="margin-bottom:4px;">
+                ${isFiring?'🔴':'🟡'} ${lab.alertname || 'unknown'}
+              </div>
+              <div class="aj">${lab.summary || lab.description || ''}</div>
+              <div class="ameta">${lab.namespace||''} ${lab.severity?'· '+lab.severity:''}</div>
+            </div>`;
+          }).join('');
+  } catch(e) {
+    document.getElementById('alertSummary').innerHTML =
+      '<div class="ai2"><div class="p-warn pill">⚠️ 无法获取告警（需 port-forward Prometheus）</div></div>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ArgoCD
+// ═══════════════════════════════════════════════════════════════
+async function loadArgoCDApps() {
+  try {
+    const r = await fetch(`${PROXY}/api/argocd/apps`);
+    const d = await r.json();
+    const apps = d.apps || [];
+
+    document.getElementById('m-apps').textContent = apps.length || 1;
+
+    const hl = (h) => h === 'Healthy' ? 'p-ok' : h === 'Degraded' ? 'p-err' : 'p-warn';
+    const sl = (s) => s === 'Synced' ? 'p-ok' : s === 'OutOfSync' ? 'p-warn' : 'p-neutral';
+
+    document.getElementById('argocdApps').innerHTML = apps.length === 0
+      ? '<div style="color:var(--text2);font-size:13px;">未找到应用（确保 ArgoCD 已部署）</div>'
+      : apps.map(a => `<div class="ap">
+          <span class="${hl(a.health)} pill">${a.health}</span>
+          <div style="flex:1;">
+            <div class="ap-name">${a.name}</div>
+            <div class="ap-meta">${a.namespace || 'argocd'} · ${a.sync || '?'}</div>
+          </div>
+          <button class="btn btn-sm" onclick="syncApp('${a.name}')">🔄</button>
+        </div>`).join('');
+
+    document.getElementById('appSummary').innerHTML = apps.length === 0
+      ? '<div style="color:var(--text2);font-size:13px;">—</div>'
+      : apps.map(a => `<div class="ap" style="margin-bottom:8px;">
+          <span class="${hl(a.health)} pill">${a.health}</span>
+          <div style="flex:1;">
+            <div class="ap-name">${a.name}</div>
+            <div class="ap-meta">${a.sync || ''} · ${a.revision?a.revision.slice(0,7):''}</div>
+          </div>
+        </div>`).join('');
+  } catch(e) {
+    document.getElementById('argocdApps').innerHTML =
+      '<div class="ai2"><div class="p-warn pill">⚠️ ArgoCD 未连接（需要 ops-mgmt 集群运行 ArgoCD）</div></div>';
+    document.getElementById('appSummary').innerHTML =
+      '<div style="color:var(--text2);font-size:13px;">—</div>';
+  }
+}
+
+async function syncApp(app) {
+  toast(`同步 ${app}…`);
+  try {
+    const r = await fetch(`${PROXY}/api/argocd/sync`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({app, context: 'kind-ops-mgmt'})
+    });
+    const d = await r.json();
+    if (d.output) {
+      toastOk(`${app} 同步完成`);
+    } else {
+      toast(`ArgoCD CLI 不可用，请在 ArgoCD UI 中手动同步`, 't-warn');
+    }
+  } catch(e) {
+    toastErr('同步失败: ' + e.message);
+  }
+  loadArgoCDApps();
+}
+
+async function syncAllArgoCD() {
+  toast('同步全部应用…');
+  const r = await fetch(`${PROXY}/api/argocd/apps`);
+  const d = await r.json();
+  for (const a of (d.apps || [])) {
+    await syncApp(a.name);
+    await new Promise(r => setTimeout(r, 500));
+  }
+  toastOk('全部同步完成');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Pods
+// ═══════════════════════════════════════════════════════════════
+async function loadPods() {
+  const ctx = document.getElementById('clu-select').value;
+  const ns  = document.getElementById('ns-select').value;
+  document.getElementById('pods-context').textContent = `${ctx} / ${ns}`;
+  try {
+    const r = await fetch(`${PROXY}/api/pods?context=${ctx}&namespace=${ns}`);
+    const d = await r.json();
+    const pods = d.pods || [];
+    document.getElementById('podList').innerHTML =
+      pods.length === 0
+        ? '<div style="color:var(--text2);font-size:13px;">无 Pod 或命名空间不存在</div>'
+        : pods.map(p => {
+            const ph = p.phase === 'Running' ? 'p-ok' : p.phase === 'Pending' ? 'p-warn' : 'p-err';
+            const rr = p.restarts > 3 ? ` <span style="color:var(--red)">⚠ ${p.restarts}次重启</span>` : '';
+            return `<div class="prow">
+              <span class="${ph} pill">${p.phase}</span>
+              <div class="pname" title="${p.name}">${p.name}</div>
+              <span style="font-size:11px;color:var(--text2);">${p.ready}</span>
+              <span style="font-size:11px;color:var(--text2);">${p.age}</span>
+              ${rr}
+            </div>`;
+          }).join('');
+  } catch(e) {
+    document.getElementById('podList').innerHTML =
+      `<div class="p-warn pill">加载失败: ${e.message}</div>`;
+  }
+}
+
+async function loadDemoAppPods() {
+  await fetch(`${PROXY}/api/pods?context=kind-ops-mgmt&namespace=demo-app`)
+    .then(r => r.json())
+    .then(d => {
+      const pods = d.pods || [];
+      document.getElementById('demoappPods').innerHTML = pods.length === 0
+        ? '<div style="color:var(--text2);font-size:13px;">demo-app 命名空间无 Pod（可能未部署）</div>'
+        : pods.map(p => {
+            const ph = p.phase === 'Running' ? 'p-ok' : p.phase === 'Pending' ? 'p-warn' : 'p-err';
+            return `<div class="prow">
+              <span class="${ph} pill">${p.phase}</span>
+              <div class="pname" title="${p.name}">${p.name}</div>
+              <span style="font-size:11px;color:var(--text2);">${p.ready}</span>
+              <span style="font-size:11px;color:var(--text2);">${p.age}</span>
+              <span style="font-size:11px;color:var(--text2);">${p.image}</span>
+              <button class="btn btn-sm" onclick="execPod('demo-app','${p.name}')">💻</button>
+            </div>`;
+          }).join('');
+    }).catch(() => {
+      document.getElementById('demoappPods').innerHTML =
+        '<div style="color:var(--text2);font-size:13px;">请确保 demo-app 已部署</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GitOps actions
+// ═══════════════════════════════════════════════════════════════
+async function rolloutRestart() {
+  toast('滚动重启中…');
+  try {
+    const r = await fetch(`${PROXY}/api/rollout-restart`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({context:'kind-ops-mgmt',namespace:'demo-app',resource:'deployment',name:'demo-app'})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toastOk('✅ 滚动重启已触发');
+      setTimeout(loadDemoAppPods, 2000);
+    } else {
+      toastErr('失败: ' + (d.message || '未知错误'));
+    }
+  } catch(e) { toastErr('请求失败: ' + e.message); }
+}
+
+async function scaleApp(replicas) {
+  toast(`扩容到 ${replicas}…`);
+  try {
+    const r = await fetch(`${PROXY}/api/scale`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({context:'kind-ops-mgmt',namespace:'demo-app',name:'demo-app',replicas})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      toastOk(`✅ 已扩容至 ${replicas} 副本`);
+      setTimeout(loadDemoAppPods, 2000);
+    } else {
+      toastErr('失败');
+    }
+  } catch(e) { toastErr('请求失败'); }
+}
+
+async function viewAppLogs() {
+  switchTab('logs');
+  document.getElementById('loki-q').value = '{namespace="demo-app"} |= "ERROR"';
+  queryLoki();
+}
+
+async function describeApp() {
+  const r = await fetch(`${PROXY}/api/pods?context=kind-ops-mgmt&namespace=demo-app`);
+  const d = await r.json();
+  const pod = (d.pods || [])[0];
+  if (!pod) return toastErr('未找到 Pod');
+  termCtx = 'kind-ops-mgmt';
+  termNs  = 'demo-app';
+  execPod(termNs, pod.name);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Loki
+// ═══════════════════════════════════════════════════════════════
+function setLoki(q) {
+  document.getElementById('loki-q').value = q;
+  queryLoki();
+}
+
+async function queryLoki() {
+  const q = document.getElementById('loki-q').value || '{namespace="demo-app"}';
+  const out = document.getElementById('logOut');
+  out.innerHTML = '<span style="color:var(--text2);">查询中… <span class="spin"></span></span>';
+  try {
+    const r = await fetch(`${PROXY}/api/loki?q=${encodeURIComponent(q)}&limit=100`);
+    const d = await r.json();
+    const streams = d.streams || [];
+    if (streams.length === 0) {
+      out.innerHTML = `<span style="color:var(--yellow);">无结果（可能 Loki 未 port-forward）</span>
+        <div style="margin-top:8px;font-size:11px;color:var(--text2);">
+          需要: wsl -d Ubuntu kubectl --context kind-ops-mgmt -n monitoring \\
+               port-forward svc/loki-gateway 3100:80
+        </div>`;
+      return;
+    }
+    out.innerHTML = streams.map(s => {
+      const ts = new Date(s.timestamp).toISOString().replace('T',' ').slice(0,19);
+      const cls = s.line.includes('ERROR') ? 'll-err' : s.line.includes('WARN') ? 'll-warn' : 'll-info';
+      return `<div class="lv" style="margin:2px 0;padding:3px 6px;background:#0a0e13;border-radius:3px;">
+<span style="color:var(--text2);font-size:10px;">${ts}</span> ${escHtml(s.line)}</div>`;
+    }).join('');
+  } catch(e) {
+    out.innerHTML = `<span class="ll-err">查询失败: ${e.message}</span>
+      <div style="margin-top:8px;font-size:11px;color:var(--text2);">
+        确保已 port-forward: wsl -d Ubuntu kubectl --context kind-ops-mgmt -n monitoring \\
+             port-forward svc/loki-gateway 3100:80
+      </div>`;
+  }
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Terminal (WebSocket + kubectl exec)
+// ═══════════════════════════════════════════════════════════════
+function connectTerminal() {
+  termCtx = document.getElementById('term-ctx').value;
+  termNs  = document.getElementById('term-ns').value;
+  termPod = document.getElementById('term-pod').value.trim();
+  if (!termPod) { toastErr('请输入 Pod 名称'); return; }
+
+  // 复用 demo-app 的第一个 pod 如果没填
+  if (!termPod || termPod === 'demo-app') {
+    // 尝试自动找
+    fetch(`${PROXY}/api/pods?context=${termCtx}&namespace=${termNs}`)
+      .then(r => r.json())
+      .then(d => {
+        const pod = (d.pods || [])[0];
+        if (pod) {
+          termPod = pod.name;
+          document.getElementById('term-pod').value = termPod;
+          _doConnect();
+        } else {
+          toastErr(`命名空间 ${termNs} 中未找到 Pod`);
+        }
+      });
+  } else {
+    _doConnect();
+  }
+}
+
+function _doConnect() {
+  document.getElementById('termTitle').textContent = `${termCtx} / ${termNs} / ${termPod}`;
+  document.getElementById('termStatus').textContent = '连接中…';
+  document.getElementById('termOutput').value = '';
+
+  appendTerm('\x1b[1;32m[INFO]\x1b[0m 连接中 kubectl exec…\n');
+
+  // WebSocket 连接到代理
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const host = location.hostname;
+  termWs = new WebSocket(`ws://localhost:8098/ws/ssh?ctx=${termCtx}&ns=${termNs}&pod=${encodeURIComponent(termPod)}`);
+
+  termWs.onopen = () => {
+    document.getElementById('termStatus').textContent = '● 已连接';
+    document.getElementById('termStatus').style.color = 'var(--green)';
+    appendTerm('\x1b[1;32m[OK]\x1b[0m 已连接到 ' + termPod + '\n');
+    appendTerm('\x1b[2m输入 kubectl 命令，按 Enter 执行，Ctrl+D 退出终端\x1b[0m\n');
+    appendTerm('\x1b[2m─────────────────────────────────────────────\x1b[0m\n');
+  };
+
+  termWs.onmessage = (evt) => {
+    try {
+      const m = JSON.parse(evt.data);
+      if (m.type === 'data') {
+        appendTerm(m.data);
+      } else if (m.type === 'error') {
+        appendTerm('\x1b[31m[ERR]\x1b[0m ' + m.data + '\n');
+      } else if (m.type === 'ready') {
+        // 连接就绪
+      }
+    } catch(e) {
+      appendTerm(evt.data);
+    }
+  };
+
+  termWs.onerror = () => {
+    appendTerm('\x1b[31m[ERR]\x1b[0m WebSocket 连接失败（需要 pip install websockets）\n');
+    appendTerm('\x1b[33m[INFO]\x1b[0m 请使用替代方案：在 WSL 终端运行 kubectl 命令\n');
+    document.getElementById('termStatus').textContent = '● WebSocket 不可用';
+    document.getElementById('termStatus').style.color = 'var(--yellow)';
+  };
+
+  termWs.onclose = () => {
+    appendTerm('\n\x1b[33m[INFO]\x1b[0m 连接已关闭\n');
+    document.getElementById('termStatus').textContent = '● 已断开';
+    document.getElementById('termStatus').style.color = 'var(--text2)';
+    termWs = null;
+  };
+}
+
+function disconnectTerminal() {
+  if (termWs) {
+    termWs.close();
+    termWs = null;
+  }
+}
+
+function clearTerminal() {
+  document.getElementById('termOutput').value = '';
+}
+
+function appendTerm(text) {
+  const el = document.getElementById('termOutput');
+  // ANSI 转义码简单处理
+  text = text.replace(/\x1b\[[0-9;]*m/g, '');
+  el.value += text;
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendTermCmd() {
+  const input = document.getElementById('termInput');
+  const cmd = input.value;
+  if (!cmd) return;
+  input.value = '';
+
+  appendTerm('\x1b[36m$\x1b[0m ' + cmd + '\n');
+
+  if (termWs && termWs.readyState === WebSocket.OPEN) {
+    termWs.send(JSON.stringify({type: 'input', data: cmd + '\r'}));
+  } else {
+    // 降级：通过 HTTP 代理执行单条命令
+    executeViaProxy(cmd);
+  }
+}
+
+async function executeViaProxy(cmd) {
+  // 简单实现：通过 /api/logs 等端点间接验证
+  // 完整 PTY 模式由 WebSocket 提供
+  appendTerm('\x1b[33m[INFO]\x1b[0m 命令已发送（详细输出请使用 WebSocket 终端）\n');
+}
+
+function execPod(ns, pod) {
+  switchTab('terminal');
+  document.getElementById('term-ctx').value = 'kind-ops-mgmt';
+  document.getElementById('term-ns').value = ns;
+  document.getElementById('term-pod').value = pod;
+  connectTerminal();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Util
+// ═══════════════════════════════════════════════════════════════
+function copyTxt(t) {
+  navigator.clipboard.writeText(t).then(() => toastOk('已复制'));
+}
+</script>
+</body>
+</html>

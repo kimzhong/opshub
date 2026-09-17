@@ -1,0 +1,166 @@
+# kube-prometheus-stack values
+# 包含：Prometheus Operator + Alertmanager + Grafana + node-exporter + kube-state-metrics
+# 这是生产标准监控栈的 helm chart
+global:
+  evaluationInterval: 30s
+  scrapeInterval: 30s
+
+# Prometheus 配置
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 15d
+    retentionSize: 50GB
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 100Gi
+    # 外部标签（用于 Mimir 远程写入或集群识别）
+    externalLabels:
+      cluster: ops-mgmt
+      region: idc
+    # ServiceMonitor selector（允许业务集群的 monitor）
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    # 启用 remote write（长期存到 Mimir）
+    remoteWrite:
+      - url: http://mimir-distributor.monitoring.svc.cluster.local:9009/api/v1/push
+        writeRelabelConfigs:
+          - sourceLabels: [__name__]
+            regex: 'go_.*|process_.*|promhttp_.*'
+            action: drop
+        queueConfig:
+          capacity: 10000
+          maxSamplesPerSend: 2000
+          batchSendDeadline: 5s
+          minBackoff: 30ms
+          maxBackoff: 5s
+    # 启用 AdminAPI（用于动态配置）
+    enableAdminAPI: true
+
+# Alertmanager
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 5Gi
+    # 外部存储 alertmanager 配置
+    configSecret: alertmanager-config
+
+# Grafana
+grafana:
+  enabled: true
+  adminPassword: changeme-please  # 生产用 vault
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  # SSO 接入 Dex
+  grafana.ini:
+    server:
+      root_url: https://grafana.ops.internal
+    auth.generic_oauth:
+      enabled: true
+      name: Dex
+      allow_sign_up: true
+      client_id: grafana
+      client_secret: grafana-client-secret-change-me
+      scopes: openid profile email groups
+      auth_url: https://dex.ops.internal/auth
+      token_url: https://dex.ops.internal/token
+      api_url: https://dex.ops.internal/userinfo
+      role_attribute_path: contains(groups[*], 'k8s-platform-admins') && 'Admin' || contains(groups[*], 'k8s-sre') && 'Editor' || 'Viewer'
+  # 数据源自动配置
+  additionalDataSources:
+    - name: Prometheus
+      type: prometheus
+      url: http://prometheus-operated.monitoring.svc.cluster.local:9090
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+    - name: Tempo
+      type: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3100
+    - name: Mimir
+      type: prometheus
+      url: http://mimir-distributor.monitoring.svc.cluster.local:9009/prometheus
+  # 预置 dashboard
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: 'opshub'
+          orgId: 1
+          folder: 'OpsHub'
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/opshub
+  dashboardsConfigMaps:
+    - configMapName: opshub-dashboards
+      fileName: opshub-dashboards.yaml
+
+# node-exporter
+nodeExporter:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+# kube-state-metrics
+kubeStateMetrics:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+# 业务集群监控（multi-cluster）
+# 通过 remote write / federation
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

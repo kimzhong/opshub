@@ -1,0 +1,54 @@
+# Staging overlay
+# - 1 个副本（节省资源）
+# - 高错误率（演示 SLO 告警）
+# - 长延迟（演示 latency SLO 告警）
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app-checkout-staging
+
+resources:
+  - ../../base
+
+# 改 namespace
+namespace: app-checkout-staging
+
+images:
+  - name: checkout-api
+    newName: harbor.ops.internal/app/checkout-api
+    newTag: v0.1.0
+
+configMapGenerator:
+  - name: checkout-api-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=staging
+      - FAILURE_RATE=0.02  # 2% 错误率，演示告警
+      - LATENCY_MS=100
+      - OTEL_TRACES_SAMPLER_ARG=1.0  # staging 100% 采样
+
+replicas:
+  - name: checkout-api
+    count: 1
+
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: checkout-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 256Mi
+
+labels:
+  - includeSelectors: true
+    pairs:
+      environment: staging
+      opshub.io/managed-by: argocd

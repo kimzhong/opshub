@@ -1,0 +1,77 @@
+# ArgoCD Root Application (App of Apps 入口)
+# 这是 ArgoCD 部署的入口，引用同一 repo 下的其他 Application
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opshub-root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ops/opshub-manifests.git
+    targetRevision: main
+    path: argocd/apps
+    directory:
+      # 递归包含此目录下的所有 Application/ApplicationSet
+      recurse: true
+      include: '{*.yaml}'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  # 健康检查
+  revisionHistoryLimit: 10
+  # 通知（如果配置了 notifications-controller）
+  # ignoreDifferences 可在此集中定义
+---
+# 备选：本地 PoC 模式 - 引用本仓库相对路径
+# 把上面 source.repoURL 改成本地模式：
+# source:
+#   repoURL: file:///workspace/manifests  # 不实际用，仅示意
+# 或使用 Helm 风格的 values 引用
+---
+# 第二种模式：直接用 ApplicationSet 作为入口
+# apiVersion: argoproj.io/v1alpha1
+# kind: ApplicationSet
+# metadata:
+#   name: opshub-root
+#   namespace: argocd
+# spec:
+#   generators:
+#     - git:
+#         repoURL: https://github.com/ops/opshub-manifests.git
+#         revision: main
+#         directories:
+#           - path: argocd/apps/*
+#   template:
+#     metadata:
+#       name: '{{path.basename}}'
+#     spec:
+#       project: default
+#       source:
+#         repoURL: https://github.com/ops/opshub-manifests.git
+#         targetRevision: main
+#         path: '{{path}}'
+#       destination:
+#         server: https://kubernetes.default.svc
+#         namespace: argocd
+#       syncPolicy:
+#         automated:
+#           prune: true
+#           selfHeal: true

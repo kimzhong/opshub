@@ -1,0 +1,58 @@
+# Production overlay
+# - 资源增加
+# - replicas 提升
+# - 错误率 0（实际）
+# - 仅 prod environment
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: app-checkout
+
+resources:
+  - ../../base
+
+# 镜像 tag 覆盖（演示用，CI 阶段会替换为真实 tag）
+images:
+  - name: checkout-api
+    newName: harbor.ops.internal/app/checkout-api
+    newTag: v0.1.0  # CI 替换
+
+# ConfigMap 覆盖
+configMapGenerator:
+  - name: checkout-api-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=prod
+      - FAILURE_RATE=0.0
+      - LATENCY_MS=0
+      - OTEL_TRACES_SAMPLER_ARG=0.1  # 生产 10% 采样
+
+# 副本数提升
+replicas:
+  - name: checkout-api
+    count: 5
+
+# 资源限制提高
+patches:
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: checkout-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+
+# 公共 labels
+labels:
+  - includeSelectors: true
+    pairs:
+      environment: prod
+      tier: "1"
+      opshub.io/managed-by: argocd

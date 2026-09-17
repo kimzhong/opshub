@@ -1,0 +1,237 @@
+# Crossplane Composition: 业务团队自助申请 Redis
+# 业务 Claim 示例（kubectl apply）：
+#   apiVersion: opshub.io/v1alpha1
+#   kind: RedisCluster
+#   metadata:
+#     name: checkout-cache
+#     namespace: team-checkout
+#   spec:
+#     size: medium
+#     environment: prod
+#     region: regiona
+#     engineVersion: "7.0"
+#     multiAz: true
+
+# ===== 1. XRD =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xredisclusters.opshub.io
+spec:
+  group: opshub.io
+  names:
+    kind: XRedisCluster
+    listKind: XRedisClusterList
+    plural: xredisclusters
+    singular: xrediscluster
+  claimNames:
+    kind: RedisCluster
+    listKind: RedisClusterList
+    plural: redisclusters
+    singular: rediscluster
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [size, environment, region]
+              properties:
+                size:
+                  type: string
+                  enum: [small, medium, large]
+                  description: 缓存规格（small=1 节点, medium=主从, large=集群）
+                environment:
+                  type: string
+                  enum: [dev, staging, prod]
+                  description: 环境
+                region:
+                  type: string
+                  enum: [regiona, regionb]
+                  description: 部署区域
+                engineVersion:
+                  type: string
+                  default: "7.0"
+                  description: Redis 版本
+                multiAz:
+                  type: boolean
+                  default: false
+                  description: 多可用区副本（prod 建议 true）
+                backupRetentionDays:
+                  type: integer
+                  default: 7
+                  minimum: 1
+                  maximum: 35
+                  description: 自动备份保留天数
+            status:
+              type: object
+              properties:
+                endpoint:
+                  type: string
+                  description: 连接地址
+                port:
+                  type: integer
+                phase:
+                  type: string
+
+---
+# ===== 2. Composition =====
+# 把 XRedisCluster 翻译成 AWS ElastiCache 资源
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xredisclusters.aws.platform
+  labels:
+    provider: aws
+    service: redis
+spec:
+  compositeTypeRef:
+    apiVersion: opshub.io/v1alpha1
+    kind: XRedisCluster
+  resources:
+    # ---- (1) ElastiCache Subnet Group ----
+    - name: subnetgroup
+      base:
+        apiVersion: elasticache.aws.upbound.io/v1beta1
+        kind: SubnetGroup
+        spec:
+          forProvider:
+            region: us-east-1
+            namePrefix: ${Name}-sg
+            description: "Subnet group for ${Name}"
+            subnetIdsSelector:
+              matchControllerRef: true
+          writeConnectionSecretToRef:
+            name: ${Name}-subnetgroup
+            namespace: crossplane-system
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.forProvider.namePrefix
+
+    # ---- (2) Replication Group（主从或集群）----
+    - name: replicationgroup
+      base:
+        apiVersion: elasticache.aws.upbound.io/v1beta1
+        kind: ReplicationGroup
+        spec:
+          forProvider:
+            region: us-east-1
+            engine: redis
+            engineVersion: "7.0"
+            cacheNodeType: cache.t3.medium
+            numberCacheClusters: 2
+            port: 6379
+            transitEncryptionEnabled: true
+            atRestEncryptionEnabled: true
+            automaticFailoverEnabled: true
+            multiAzEnabled: false
+            snapshotRetentionLimit: 7
+            snapshotWindow: "03:00-05:00"
+            maintenanceWindow: "mon:00:00-mon:03:00"
+            subnetGroupNameSelector:
+              matchControllerRef: true
+          writeConnectionSecretToRef:
+            name: ${Name}-endpoint
+            namespace: crossplane-system
+            data:
+              endpoint: status.atProvider.configurationEndpoint
+              port: status.atProvider.port
+              authToken: spec.forProvider.authToken
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        # size 映射到 node type 和集群数
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.cacheNodeType
+          transforms:
+            - type: map
+              map:
+                small: cache.t3.micro
+                medium: cache.t3.medium
+                large: cache.r6g.large
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.numberCacheClusters
+          transforms:
+            - type: map
+              map:
+                small: 1
+                medium: 2
+                large: 3
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.engineVersion
+          toFieldPath: spec.forProvider.engineVersion
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.multiAz
+          toFieldPath: spec.forProvider.multiAzEnabled
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.backupRetentionDays
+          toFieldPath: spec.forProvider.snapshotRetentionLimit
+
+    # ---- (3) Security Group ----
+    - name: securitygroup
+      base:
+        apiVersion: ec2.aws.upbound.io/v1beta1
+        kind: SecurityGroup
+        spec:
+          forProvider:
+            region: us-east-1
+            namePrefix: ${Name}-redis-sg
+            description: "Security group for Redis ${Name}"
+            ingress:
+              - fromPort: 6379
+                toPort: 6379
+                protocol: tcp
+                cidrBlocks:
+                  - 10.0.0.0/8
+                description: "Allow Redis from VPC"
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.region
+          toFieldPath: spec.forProvider.region
+          transforms:
+            - type: map
+              map:
+                regiona: us-east-1
+                regionb: us-west-2
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.forProvider.namePrefix
+
+---
+# ===== 3. Patch Set: 安全默认值 =====
+apiVersion: apiextensions.crossplane.io/v1
+kind: PatchSet
+metadata:
+  name: redis-security-defaults
+spec:
+  patches:
+    - type: FromCompositeFieldPath
+      fromFieldPath: spec.environment
+      toFieldPath: spec.forProvider.transitEncryptionEnabled
+      transforms:
+        - type: map
+          map:
+            prod: true
+            staging: true
+            dev: false

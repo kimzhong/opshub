@@ -1,0 +1,134 @@
+# Dex Helm values
+# Dex 作为 OIDC 代理，联邦 Keycloak + GitHub + LDAP
+# 关键职责：把多种 IdP 统一包装为 K8s 认识的 OIDC
+config:
+  issuer: https://dex.ops.internal
+  storage:
+    type: kubernetes
+    config:
+      inCluster: true
+  web:
+    http: 0.0.0.0:5556
+    allowedOrigins:
+      - '*'
+  telemetry:
+    http: 0.0.0.0:5558
+  enablePasswordDB: false
+  staticClients:
+    - id: kubernetes
+      name: Kubernetes
+      secret: dex-kubernetes-secret-change-me
+      redirectURIs:
+        - http://localhost:8000
+        - http://localhost:18000
+        - urn:ietf:wg:oauth:2.0:oob
+    - id: argocd
+      name: ArgoCD
+      secret: dex-argocd-secret-change-me
+      redirectURIs:
+        - https://argocd.ops.internal/auth/callback
+    - id: grafana
+      name: Grafana
+      secret: dex-grafana-secret-change-me
+      redirectURIs:
+        - https://grafana.ops.internal/callback
+  connectors:
+    # Keycloak OIDC 上游
+    - type: oidc
+      id: keycloak
+      name: Keycloak
+      config:
+        issuer: https://sso.ops.internal/realms/kubernetes
+        clientID: dex
+        clientSecret: dex-keycloak-secret-change-me
+        redirectURI: https://dex.ops.internal/callback
+        # 关键：传递 groups claim
+        overrideClaimMapping: true
+        # claim 映射
+        claimsMapping:
+          # 使用 preferred_username 作为 K8s username
+          preferred_username: preferred_username
+          # 邮箱
+          email: email
+          # 组（必须）
+          groups: groups
+        # 允许的组（白名单；不在此列表的用户即使能登录 Keycloak 也无法访问 K8s）
+        groups:
+          - k8s-platform-admins
+          - k8s-sre
+          - dev-team-payment
+          - dev-team-checkout
+          - k8s-readonly
+        # 关键：允许传递 groups
+        insecureEnableGroups: true
+        # 跳过 email 验证（Keycloak 用户默认有验证）
+        insecureSkipEmailVerified: true
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+        # 不使用 PKCE（PoC 简化）
+        # tokenEndpointAuthMethod: client_secret_post
+  # OAuth2 配置
+  oauth2:
+    skipApprovalScreen: true
+  # 登录页面配置
+  frontend:
+    theme: opshub
+    issuer: OpsHub
+  expiry:
+    signingKeys: 6h
+    idTokens: 1h
+    authRequests: 1h
+    deviceRequests: 5m
+
+# 启用 gRPC
+grpc:
+  addr: 0.0.0.0:5557
+  tlsCert: /etc/dex/tls/server.crt
+  tlsKey: /etc/dex/tls/server.key
+  reflection: true
+
+# 镜像
+image:
+  registry: ghcr.io
+  repository: dexidp/dex
+  tag: v2.40.0
+
+# 资源
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# 多副本 + 负载均衡
+replicaCount: 2
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: HTTP
+  hosts:
+    - host: dex.ops.internal
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: dex-tls
+      hosts:
+        - dex.ops.internal
+
+# Service Monitor
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus

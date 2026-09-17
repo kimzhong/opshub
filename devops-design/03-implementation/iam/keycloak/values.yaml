@@ -1,0 +1,116 @@
+# Keycloak Helm values
+# 关键决策：Keycloak 必须部署在它要认证的 K8s 集群之外
+# 此次部署在 ops-mgmt 是 PoC 简化，生产建议独立集群
+# PoC 用 PostgreSQL 内置，生产外置 + HA
+auth:
+  adminUser: admin
+  # 密码从 secret 读取（生产用 vault 管理）
+  existingSecret: keycloak-admin-secret
+  existingSecretKey: password
+
+# HTTP 入口配置（重要：proxy headers 必须正确）
+http:
+  enabled: true
+  port: 8080
+  # ingress 类名（kind 用 nginx）
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hostname: sso.ops.internal
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
+      nginx.ingress.kubernetes.io/proxy-buffers: "4 256k"
+    tls:
+      - secretName: keycloak-tls
+        hosts:
+          - sso.ops.internal
+
+# 镜像
+image:
+  registry: quay.io
+  repository: keycloak/keycloak
+  tag: "24.0"
+  # 优化镜像（含所有特性）
+  digest: ""
+
+# 启动参数
+startupProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 30
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 60
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+# 资源
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+# 多副本
+replicaCount: 2
+
+# PostgreSQL
+postgresql:
+  enabled: true
+  auth:
+    existingSecret: keycloak-db-secret
+    secretKeys:
+      adminPasswordKey: password
+      userPasswordKey: password
+  primary:
+    persistence:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+# 缓存（生产建议外置 Redis）
+# cache:
+#   stack: kubernetes  # 多副本时必须
+#   stackConfig:
+#     kubernetes:
+#       discovery:
+#         service: kubernetes
+#         namespace: keycloak
+
+# 健康/指标
+health:
+  enabled: true
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: prometheus
+
+# 特性
+features:
+  enabled:
+    - docker
+    - token-exchange  # 必需：支持 CI 短期 token
+    - admin-fine-grained-authz
+    - client-secret-rotation
+    - organization

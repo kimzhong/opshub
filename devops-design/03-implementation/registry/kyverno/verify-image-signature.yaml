@@ -1,0 +1,46 @@
+# Kyverno 策略：强制业务镜像必须经过 Cosign 签名
+# 这是供应链安全的核心策略
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/title: Verify Image Signatures
+    policies.kyverno.io/category: Supply Chain Security
+    policies.kyverno.io/description: |
+      所有业务 Pod 必须使用经过 Cosign 签名的镜像。
+      签名公钥从 K8s secret 读取。
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - argocd
+                - kyverno
+                - harbor
+                - monitoring
+                - chaos-mesh
+                - velero
+      verifyImages:
+        - imageReferences:
+            - "harbor.ops.internal/app/*"
+            - "harbor.ops.internal/platform/*"
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      # 实际部署时替换为 cosign public key
+                      # 这里的占位符会被 initContainer 或 external secret 替换
+                      -----END PUBLIC KEY-----

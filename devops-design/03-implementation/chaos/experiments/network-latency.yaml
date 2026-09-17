@@ -1,0 +1,68 @@
+# Chaos Mesh 实验：NetworkChaos
+# 注入网络延迟和丢包，验证超时和重试逻辑
+# Tier 2 实验：每周运行
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-delay-checkout-api
+  namespace: chaos-mesh
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - app-checkout-staging
+    labelSelectors:
+      app.kubernetes.io/name: checkout-api
+  delay:
+    latency: "200ms"
+    jitter: "50ms"
+    correlation: "75"
+  direction: to
+  # 影响哪些目标（出向流量）
+  target:
+    selector:
+      namespaces:
+        - app-checkout-staging
+      labelSelectors:
+        app.kubernetes.io/name: checkout-api
+  duration: "10m"
+  scheduler:
+    cron: "@every 168h"  # 每周
+  abortConditions:
+    - type: SLOBurnRateExceeded
+      key: http_request_duration_seconds
+      value: "0.8"  # P99 > 800ms 停止
+      duration: "2m"
+---
+# 网络分区实验（Tier 3）：模拟 region 间断网
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: network-partition-az
+  namespace: chaos-mesh
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - app-checkout
+    labelSelectors:
+      app.kubernetes.io/name: checkout-api
+      zone: az-a  # 模拟 az-a 故障
+  direction: both
+  target:
+    selector:
+      namespaces:
+        - app-checkout
+      labelSelectors:
+        app.kubernetes.io/name: checkout-api
+        zone: az-b
+  duration: "30m"
+  # 必须人工触发（game day）
+  # scheduler: cron: "@every 90d"
+  abortConditions:
+    - type: SLOBurnRateExceeded
+      key: http_errors_total
+      value: "100"
+      duration: "1m"

@@ -1,0 +1,58 @@
+# Chaos Mesh Helm values
+# CNCF Incubating 混沌工程平台
+chaosDaemon:
+  # 使用 eBPF 模式（如果内核支持）
+  # runtime: ebpf  # 优先 eBPF，否则 docker / containerd
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+chaosControllerManager:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+chaosDashboard:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - name: chaos.ops.internal
+        path: /
+    tls:
+      - secretName: chaos-tls
+        hosts:
+          - chaos.ops.internal
+
+# DNSChaos / NetworkChaos 需要的特权
+bpfKprobes:
+  hostNetwork: true
+
+# 启用 webhooks（用于自动注入 stop condition）
+webhook:
+  enabled: true
+  certManager:
+    enabled: false  # 用内置证书
+
+# ServiceMonitor
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: prometheus
+
+# 安全（PoC 用 cluster-scoped，生产用 namespace-scoped）
+chaosDaemon:
+  securityContext:
+    privileged: false  # 演示用 false，生产需要 true 才能注入网络故障
+    capabilities:
+      add: ["SYS_PTRACE", "NET_ADMIN", "NET_RAW"]

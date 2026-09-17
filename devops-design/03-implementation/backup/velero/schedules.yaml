@@ -1,0 +1,68 @@
+# Velero 备份策略
+# 分层：每 6h 增量 + 每日全量 + 每周保留
+---
+# 每 6 小时备份业务 namespace
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: app-backup-6h
+  namespace: velero
+spec:
+  schedule: "0 */6 * * *"
+  template:
+    includedNamespaces:
+      - "app-*"
+    excludedResources:
+      - events
+    snapshotVolumes: true
+    ttl: "720h"  # 30 天
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+---
+# 每日全量
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: app-backup-daily
+  namespace: velero
+spec:
+  schedule: "0 2 * * *"
+  template:
+    includedNamespaces:
+      - "app-*"
+    snapshotVolumes: true
+    ttl: "2160h"  # 90 天
+    storageLocation: default
+---
+# 平台关键数据备份
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: platform-backup-daily
+  namespace: velero
+spec:
+  schedule: "0 3 * * *"
+  template:
+    includedNamespaces:
+      - keycloak
+      - harbor
+      - argocd
+    ttl: "2160h"
+    storageLocation: default
+---
+# 备份存储位置 - 跨 region 副本（生产用）
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: dr-region
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: opshub-velero-backups-dr
+  config:
+    region: cn-east-1
+  credential:
+    name: velero-credentials
+    key: cloud

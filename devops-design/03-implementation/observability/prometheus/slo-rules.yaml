@@ -1,0 +1,142 @@
+# Prometheus 告警规则
+# 核心：SLO burn rate 多窗口告警（Google SRE Workbook）
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: opshub-slo-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: opshub-slo
+spec:
+  groups:
+    # ===== checkout-api SLO =====
+    - name: checkout-api.slo
+      interval: 30s
+      rules:
+        # 可用性 SLO: 99.5% 成功（30天窗口）
+        - alert: CheckoutAPIAvailabilityBurnRateFast
+          expr: |
+            (
+              sum(rate(http_requests_total{job="checkout-api",status!~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="checkout-api"}[5m]))
+            ) < (1 - (14.4 * 0.005))
+          for: 2m
+          labels:
+            severity: critical
+            slo: checkout-api-availability
+            service: checkout-api
+            runbook: https://wiki.internal/runbooks/checkout-api-burn-fast
+          annotations:
+            summary: "checkout-api 1h 内耗光月度 error budget（14.4x burn）"
+            description: "可用性 SLO 99.5% 正在被快速消耗。当前 burn rate: {{ $value | humanizePercentage }}"
+
+        - alert: CheckoutAPIAvailabilityBurnRateSlow
+          expr: |
+            (
+              sum(rate(http_requests_total{job="checkout-api",status!~"5.."}[30m]))
+              /
+              sum(rate(http_requests_total{job="checkout-api"}[30m]))
+            ) < (1 - (6 * 0.005))
+          for: 5m
+          labels:
+            severity: warning
+            slo: checkout-api-availability
+            service: checkout-api
+          annotations:
+            summary: "checkout-api 5h 内耗光月度 error budget（6x burn）"
+
+        - alert: CheckoutAPIAvailabilityBurnRateLong
+          expr: |
+            (
+              sum(rate(http_requests_total{job="checkout-api",status!~"5.."}[6h]))
+              /
+              sum(rate(http_requests_total{job="checkout-api"}[6h]))
+            ) < (1 - (1 * 0.005))
+          for: 30m
+          labels:
+            severity: warning
+            slo: checkout-api-availability
+            service: checkout-api
+          annotations:
+            summary: "checkout-api 缓慢消耗 error budget（1x burn 持续 6h）"
+
+        # 延迟 SLO: 99% < 800ms
+        - alert: CheckoutAPILatencyP99BurnRateFast
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_request_duration_seconds_bucket{job="checkout-api"}[5m])) by (le)
+            ) > 0.8
+          for: 5m
+          labels:
+            severity: critical
+            slo: checkout-api-latency
+            service: checkout-api
+          annotations:
+            summary: "checkout-api P99 延迟 > 800ms 持续 5min"
+            description: "当前 P99: {{ $value }}s"
+
+    # ===== payment-api SLO =====
+    - name: payment-api.slo
+      interval: 30s
+      rules:
+        - alert: PaymentAPIAvailabilityBurnRateFast
+          expr: |
+            (
+              sum(rate(http_requests_total{job="payment-api",status!~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="payment-api"}[5m]))
+            ) < (1 - (14.4 * 0.001))  # 99.9% SLO
+          for: 1m
+          labels:
+            severity: critical
+            slo: payment-api-availability
+            service: payment-api
+          annotations:
+            summary: "payment-api（Tier 0）错误率激增"
+
+    # ===== 平台 SLO =====
+    - name: platform.slo
+      interval: 30s
+      rules:
+        # ArgoCD 应用同步失败
+        - alert: ArgoCDAppDegraded
+          expr: |
+            argocd_app_info{health_status!="Healthy"} == 1
+          for: 10m
+          labels:
+            severity: warning
+            service: argocd
+          annotations:
+            summary: "ArgoCD 应用 {{ $labels.name }} 不健康"
+
+        # ArgoCD 同步失败
+        - alert: ArgoCDAppSyncFailed
+          expr: |
+            argocd_app_sync_status{status!="Synced"} == 1
+          for: 5m
+          labels:
+            severity: critical
+            service: argocd
+          annotations:
+            summary: "ArgoCD 应用 {{ $labels.name }} 同步失败"
+
+        # Prometheus targets down
+        - alert: PrometheusTargetDown
+          expr: up == 0
+          for: 5m
+          labels:
+            severity: warning
+            service: prometheus
+          annotations:
+            summary: "Prometheus target {{ $labels.job }} down"
+
+        # 关键：Prometheus 自身 down
+        - alert: PrometheusDown
+          expr: absent(up{job="prometheus"} == 1)
+          for: 5m
+          labels:
+            severity: critical
+            service: prometheus
+          annotations:
+            summary: "Prometheus 整体不可用"

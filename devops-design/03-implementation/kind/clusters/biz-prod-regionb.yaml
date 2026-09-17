@@ -1,0 +1,43 @@
+# kind 集群配置：biz-prod-regionb (业务生产集群 B)
+# 用途：运行业务应用，模拟公有云 region B（灾备）
+# 节点：1 control-plane + 2 worker
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: biz-prod-regionb
+networking:
+  podSubnet: "10.102.0.0/16"
+  serviceSubnet: "10.202.0.0/16"
+  disableDefaultCNI: false
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.30.0
+    extraPortMappings:
+      - containerPort: 30082
+        hostPort: 30082
+        protocol: TCP
+      - containerPort: 30445
+        hostPort: 30445
+        protocol: TCP
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true,region=region-b"
+  - role: worker
+    image: kindest/node:v1.30.0
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "workload=app,zone=az-a"
+  - role: worker
+    image: kindest/node:v1.30.0
+    kubeadmConfigPatches:
+      - |
+        kind: JoinConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "workload=app,zone=az-b"

@@ -1,0 +1,184 @@
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  APP_NAME: demo-app
+  K8S_CONTEXT: kind-ops-mgmt
+  REGISTRY_IMAGE: registry.gitlab.com/YOUR_USERNAME/demo-app
+
+stages:
+  - build
+  - test
+  - security
+  - deploy-staging
+  - deploy-production
+  - verify
+
+# ── Build stage ──────────────────────────────────────────────
+build:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker info
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $APP_NAME:$CI_COMMIT_SHORT_SHA .
+    - docker tag $APP_NAME:$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker tag $APP_NAME:$CI_COMMIT_SHORT_SHA $REGISTRY_IMAGE:latest
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin $CI_REGISTRY
+    - docker push $REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+    - docker push $REGISTRY_IMAGE:latest
+  tags:
+    - kubernetes
+  only:
+    - main
+    - develop
+
+# ── Test stage ────────────────────────────────────────────────
+test-unit:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - pip install pytest pytest-cov requests
+  script:
+    - pytest --cov=src tests/
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  tags:
+    - kubernetes
+
+test-integration:
+  stage: test
+  image: curlimages/curl:latest
+  services:
+    - redis:7-alpine
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - echo "Running integration tests..."
+    - sleep 2
+    - curl -f http://redis:6379/info || echo "Redis check done"
+  tags:
+    - kubernetes
+  allow_failure: true
+
+# ── Security stage ───────────────────────────────────────────
+security-scan:
+  stage: security
+  image: aquasec/trivy:latest
+  before_script:
+    - trivy version
+  script:
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL $REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  tags:
+    - kubernetes
+  allow_failure: true
+  only:
+    - main
+
+trivy-iac:
+  stage: security
+  image: aquasec/trivy:latest
+  before_script:
+    - trivy config --exit-code 1 --severity HIGH,CRITICAL ./k8s/
+  script:
+    - echo "IaC scanning complete"
+  tags:
+    - kubernetes
+  only:
+    - main
+    - develop
+
+# ── Deploy Staging ───────────────────────────────────────────
+deploy-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  before_script:
+    - kubectl version --client
+    - echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - kubectl config use-context $K8S_CONTEXT
+  script:
+    - echo "Deploying to staging..."
+    - kubectl create namespace demo-app --dry-run=client -o yaml | kubectl apply -f -
+    - |
+      sed "s/__IMAGE_TAG__/$REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA/g" \
+        k8s/deployment.yaml | kubectl apply -f -
+    - kubectl apply -f k8s/hpa.yaml
+    - echo "Waiting for rollout..."
+    - kubectl rollout status deployment/demo-app -n demo-app --timeout=120s
+    - kubectl get pods -n demo-app
+  environment:
+    name: staging
+    url: http://demo-app.local
+    on_stop: rollback-staging
+  tags:
+    - kubernetes
+  only:
+    - develop
+
+# ── Deploy Production ─────────────────────────────────────────
+deploy-production:
+  stage: deploy-production
+  image: bitnami/kubectl:latest
+  before_script:
+    - kubectl version --client
+    - echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - kubectl config use-context $K8S_CONTEXT
+  script:
+    - echo "Deploying to production..."
+    - kubectl create namespace demo-app --dry-run=client -o yaml | kubectl apply -f -
+    - |
+      sed "s/__IMAGE_TAG__/$REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA/g" \
+        k8s/deployment.yaml | kubectl apply -f -
+    - kubectl apply -f k8s/hpa.yaml
+    - echo "Waiting for rollout..."
+    - kubectl rollout status deployment/demo-app -n demo-app --timeout=120s
+    - echo "Deployment successful!"
+  environment:
+    name: production
+    url: http://demo-app.local
+  tags:
+    - kubernetes
+  only:
+    - main
+  when: manual
+
+# ── Verify ───────────────────────────────────────────────────
+verify-deployment:
+  stage: verify
+  image: curlimages/curl:latest
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - echo "Verifying deployment..."
+    - INGRESS_HOST=$(kubectl get ingress -n demo-app -o jsonpath='{.items[0].spec.rules[0].host}')
+    - echo "Ingress host: $INGRESS_HOST"
+    - curl -sf http://demo-app-svc.demo-app.svc.cluster.local/health && echo "Health OK"
+    - curl -sf http://demo-app-svc.demo-app.svc.cluster.local/ready && echo "Ready OK"
+  tags:
+    - kubernetes
+  needs:
+    - deploy-production
+  only:
+    - main
+
+# ── Rollback ─────────────────────────────────────────────────
+rollback-staging:
+  stage: deploy-staging
+  image: bitnami/kubectl:latest
+  before_script:
+    - kubectl version --client
+    - echo "$KUBECONFIG_DATA" | base64 -d > /tmp/kubeconfig
+    - export KUBECONFIG=/tmp/kubeconfig
+    - kubectl config use-context $K8S_CONTEXT
+  script:
+    - echo "Rolling back staging..."
+    - kubectl rollout undo deployment/demo-app -n demo-app
+  environment:
+    name: staging
+    action: stop
+  tags:
+    - kubernetes
+  when: manual

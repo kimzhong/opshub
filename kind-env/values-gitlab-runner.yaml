@@ -1,0 +1,64 @@
+# GitLab Runner values - 注册到 gitlab.com
+# 需要配置: gitlabUrl + runnerRegistrationToken
+
+fullnameOverride: gitlab-runner
+namespaceOverride: gitlab-runner
+
+imagePullPolicy: IfNotPresent
+
+gitlabUrl: https://gitlab.com
+
+runnerRegistrationToken: "REPLACE_WITH_YOUR_TOKEN"
+
+runners:
+  locked: false
+  protected: false
+  tags:
+    - kubernetes
+    - kind
+  name: kind-ops-mgmt
+  privileged: true
+  namespace: gitlab-runner
+  outputLimit: 16384
+  requestConcurrency: 1
+  cache:
+    Shared: true
+    Volume:
+      # 使用 PVC 缓存构建依赖
+      disabled: false
+  buildContainer:
+    privileged: true
+  helperCpuLimit: "500m"
+  helperMemoryLimit: "256Mi"
+  helperCpuRequest: "100m"
+  helperMemoryRequest: "64Mi"
+
+rbac:
+  create: true
+  clusterWideAccess: true
+
+securityContext:
+  runAsUser: 0
+  fsGroup: 0
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+tolerations:
+  - key: "node-role.kubernetes.io/master"
+    effect: "NoSchedule"
+    operator: "Exists"
+  - key: "node-role.kubernetes.io/control-plane"
+    effect: "NoSchedule"
+    operator: "Exists"
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 5Gi
+  storageClassName: standard

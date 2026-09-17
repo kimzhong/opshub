@@ -1,0 +1,95 @@
+# K8s API Server OIDC 配置
+# 这部分需要 kubeadm/cluster 启动参数配置
+# 在 kind 环境通过 patch 实现
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+# 关键：OIDC 集成
+apiServer:
+  extraArgs:
+    - name: oidc-issuer-url
+      value: https://dex.ops.internal
+    - name: oidc-client-id
+      value: kubernetes
+    - name: oidc-username-claim
+      value: preferred_username
+    - name: oidc-username-prefix
+      value: "oidc:"
+    - name: oidc-groups-claim
+      value: groups
+    - name: oidc-groups-prefix
+      value: "oidc:"
+    - name: oidc-required-claim
+      value: "groups=k8s-platform-admins"  # 限制特定 group
+    - name: oidc-signing-algs
+      value: RS256
+    # 审计（生产必须）
+    - name: audit-log-maxage
+      value: "30"
+    - name: audit-log-maxbackup
+      value: "10"
+    - name: audit-log-maxsize
+      value: "100"
+    - name: audit-log-path
+      value: /var/log/kubernetes/audit/audit.log
+    - name: audit-policy-file
+      value: /etc/kubernetes/audit-policy.yaml
+    - name: feature-gates
+      value: ServiceAccountTokenJTI=true
+---
+# 与 OIDC 配套的 RBAC 绑定示例
+# 业务团队 → namespace 权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-k8s-platform-admins
+  annotations:
+    description: "Platform admins from OIDC group k8s-platform-admins"
+subjects:
+  - kind: Group
+    name: oidc:k8s-platform-admins
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-k8s-sre-readonly
+subjects:
+  - kind: Group
+    name: oidc:k8s-sre
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: oidc-k8s-readonly
+subjects:
+  - kind: Group
+    name: oidc:k8s-readonly
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
+---
+# 业务团队 namespace 级别 admin（在 ArgoCD 部署时按团队创建）
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oidc-checkout-team
+  namespace: app-checkout
+subjects:
+  - kind: Group
+    name: oidc:dev-team-checkout
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
