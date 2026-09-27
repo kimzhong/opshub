@@ -1,0 +1,5 @@
+# kind 集群里 kubelet 用的是自签证书且监听地址是节点 IP，
+# metrics-server 默认会报 x509 证书错误，所以要加这几个参数。
+args:
+  - --kubelet-insecure-tls
+  - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname

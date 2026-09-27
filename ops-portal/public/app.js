@@ -906,7 +906,7 @@ async function quickExec() {
 
 const TOOLS = [
   { name: 'Ops Portal', url: '', desc: '本平台', cred: '—', icon: '⚙️' },
-  { name: 'Grafana', url: 'http://localhost:30300', desc: '可视化 + 日志', cred: 'admin / admin123', icon: '📈' },
+  { name: 'Grafana', url: 'http://localhost:30300', desc: '可视化 + 日志', cred: 'admin / sQrlls83VtTlkHU0bL2vVstGbaJ4oeToSNkwYM2b', icon: '📈' },
   { name: 'ArgoCD', url: 'http://localhost:31773', desc: 'GitOps 控制台', cred: 'admin / wG0YYYIbLXX31dVf', icon: '🔄' },
   { name: 'Prometheus', url: 'http://localhost:30090', desc: '指标 + 告警规则', cred: '—（NodePort）', icon: '📊' },
   { name: 'Alertmanager', url: 'http://localhost:30093', desc: '告警路由', cred: '—（NodePort）', icon: '🔔' },
