@@ -1,3 +1,12 @@
+# ArgoCD Application 清单
+#
+# 用法（应用本身是「引导资源」，不归 ArgoCD 自己管，手工 apply 一次即可）：
+#   kubectl apply -n argocd -f demo-app/argocd/app.yaml
+#
+# 拆成两个 Application 的原因：ArgoCD 的 Directory 源会把目录下所有 yaml
+# 都应用到 destination.namespace，而 demo-app 工作负载和 ServiceMonitor
+# 分属 demo-app / monitoring 两个命名空间，必须分开管。
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -5,12 +14,15 @@ metadata:
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/name: demo-app
+    app.kubernetes.io/part-of: opshub
 spec:
   project: default
   source:
-    repoURL: 'https://gitlab.com/YOUR_USERNAME/demo-app.git'
-    targetRevision: main
-    path: k8s
+    repoURL: 'https://github.com/kimzhong/opshub.git'
+    targetRevision: master
+    path: demo-app/gitops/app
   destination:
     server: 'https://kubernetes.default.svc'
     namespace: demo-app
@@ -28,3 +40,29 @@ spec:
         duration: 5s
         factor: 2
         maxDuration: 3m
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: demo-app-servicemonitor
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    app.kubernetes.io/name: demo-app
+    app.kubernetes.io/part-of: opshub
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/kimzhong/opshub.git'
+    targetRevision: master
+    path: demo-app/gitops/servicemonitor
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PruneLast=true

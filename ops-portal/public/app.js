@@ -80,6 +80,8 @@ const store = {
   timer: null,
   page: 'overview',
   alertTab: 'firing',
+  lokiAutoRun: false,
+  podsAutoPicked: false,
   selected: {
     cluster: null,
     clusterPage: null,
@@ -176,7 +178,9 @@ function goto(page) {
     clusters:  loadClusterPage,
     pods:      loadPodsPage,
     gitops:    loadGitOps,
-    logs:      () => {},
+    // 进入日志页时自动跑一次默认查询（输入框本身就有预置 LogQL），
+    // 否则直接打开这一页只能看到一个空壳
+    logs:      () => { if (!store.lokiAutoRun) { store.lokiAutoRun = true; queryLoki(); } },
     alerts:    () => {},
     terminal:  loadTerminalForm,
     links:     renderLinks,
@@ -317,7 +321,7 @@ function renderAlertTabs(a) {
     ? `<div class="notice notice-warn" style="margin:16px;">
          <span class="notice-icon">⚠️</span>
          <div><strong>Prometheus 未连接</strong><br>${esc(a.prometheus.error)}<br>
-         <code>kubectl -n monitoring port-forward svc/prometheus-prometheus 9090:9090</code></div>
+         <code>浏览器打开 http://localhost:30090（NodePort 直连）</code></div>
        </div>`
     : firing.length === 0
       ? empty('✅', '没有告警')
@@ -355,7 +359,7 @@ function renderAlertTabs(a) {
   $('#prom-status').innerHTML = a.prometheus.error
     ? `<div class="notice notice-warn" style="margin:0;">
          <span class="notice-icon">⚠️</span>
-         <div>${esc(a.prometheus.error)}<br><code>kubectl -n monitoring port-forward svc/prometheus-prometheus 9090:9090</code></div>
+         <div>${esc(a.prometheus.error)}<br><code>浏览器打开 http://localhost:30090（NodePort 直连）</code></div>
        </div>`
     : `<div class="grid g3">
          <div class="metric"><div class="metric-value ok">${a.prometheus.count}</div><div class="metric-label">Firing</div></div>
@@ -445,8 +449,19 @@ async function loadClusterPage() {
 
 async function loadPodsPage() {
   const ctx = store.selected.podsCluster;
-  const ns = store.selected.podsNamespace;
   if (!ctx) return;
+  const sel = $('#pods-namespace');
+  // 下拉默认第一项是 default，往往是空命名空间。
+  // 自动进入本页时（而非用户主动点查询）逐个找一个真有 Pod 的命名空间，
+  // 免得每次进来都是「命名空间 default 没有 Pod」
+  if (!store.podsAutoPicked) {
+    store.podsAutoPicked = true;
+    for (const opt of [...sel.options]) {
+      sel.value = opt.value;
+      const d = await api.pods(ctx, opt.value);
+      if (d.ok !== false && (d.pods || []).length > 0) break;
+    }
+  }
   await queryPods();
 }
 
@@ -671,7 +686,7 @@ async function gitopsAction(action) {
       } catch (e) { toast(e.message, 'err'); }
       break;
     case 'open-argocd':
-      window.open('https://localhost:30080', '_blank', 'noopener');
+      window.open('http://localhost:31773', '_blank', 'noopener');
       break;
     case 'open-grafana':
       window.open('http://localhost:30300', '_blank', 'noopener');
@@ -713,7 +728,7 @@ async function queryLoki() {
       box.innerHTML = `<div class="notice notice-warn" style="margin:0;">
         <span class="notice-icon">⚠️</span>
         <div><strong>Loki 未连接</strong><br>${esc(d.error || '')}<br>
-        <code>kubectl -n monitoring port-forward svc/loki-gateway 3100:80</code></div>
+        <code>浏览器打开 http://localhost:30212（NodePort 直连）</code></div>
       </div>`;
       $('#logs-summary').textContent = '';
       return;

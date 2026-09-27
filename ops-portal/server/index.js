@@ -186,9 +186,9 @@ server.listen(CONFIG.httpPort, () => {
   console.log('');
   console.log('  提示：告警/日志需要先 port-forward');
   console.log(`    wsl -d ${CONFIG.wslDistro} kubectl --context ${CONFIG.clusters.ops} -n monitoring \\`);
-  console.log('      port-forward svc/prometheus-prometheus 9090:9090 &');
+  console.log('      http://localhost:30090 已就绪 (NodePort) &');
   console.log(`    wsl -d ${CONFIG.wslDistro} kubectl --context ${CONFIG.clusters.ops} -n monitoring \\`);
-  console.log('      port-forward svc/loki-gateway 3100:80 &');
+  console.log('      http://localhost:30212 已就绪 (NodePort) &');
   console.log('');
 });
 

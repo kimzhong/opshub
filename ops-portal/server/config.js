@@ -17,10 +17,14 @@ export const CONFIG = {
     regionB: 'kind-biz-prod-regionb',
   },
 
-  // 集群内部服务 → 本地 port-forward 端口
+  // 集群内部服务 → 宿主机 NodePort 直连地址
+  // 全部走 NodePort，不再依赖 kubectl port-forward
   endpoints: {
-    prometheus: process.env.PROM_URL || 'http://localhost:9090',
-    loki: process.env.LOKI_URL || 'http://localhost:3100',
+    prometheus: process.env.PROM_URL || 'http://localhost:30090',
+    loki: process.env.LOKI_URL || 'http://localhost:30212',
+    alertmanager: process.env.ALERTMANAGER_URL || 'http://localhost:30093',
+    grafana: process.env.GRAFANA_URL || 'http://localhost:30300',
+    argocd: process.env.ARGOCD_URL || 'http://localhost:31773',
   },
 
   // 常用命名空间

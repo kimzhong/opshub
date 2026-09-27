@@ -1,0 +1,23 @@
+# 单独放在一个目录，是因为 ArgoCD 的 Directory 源会把目录下所有 yaml
+# 都应用到 destination.namespace。ServiceMonitor 必须在 monitoring 命名空间，
+# 所以不能和应用清单混在一起。
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: demo-app
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: demo-app
+spec:
+  namespaceSelector:
+    matchNames:
+      - demo-app
+  selector:
+    matchLabels:
+      app: demo-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

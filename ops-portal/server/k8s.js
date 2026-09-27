@@ -75,9 +75,15 @@ export async function getClusterOverview(context) {
   const nodes = (nodesRaw?.items || []).map((n) => {
     const labels = n.metadata?.labels || {};
     const conditions = n.status?.conditions || [];
+    // 必须判断 key 是否存在，不能用值判断：
+    // k8s 的 node-role 标签值是空字符串 ""，在 JS 里是 falsy，
+    // 直接取值会把控制面节点误判成 worker
+    const isControlPlane =
+      'node-role.kubernetes.io/control-plane' in labels ||
+      'node-role.kubernetes.io/master' in labels;
     return {
       name: n.metadata?.name || '?',
-      role: labels['node-role.kubernetes.io/control-plane'] ? 'control-plane' : 'worker',
+      role: isControlPlane ? 'control-plane' : 'worker',
       ready: conditions.some((c) => c.type === 'Ready' && c.status === 'True'),
       version: n.status?.nodeInfo?.kubeletVersion || '?',
       osImage: n.status?.nodeInfo?.osImage || '?',
@@ -309,7 +315,7 @@ export async function fetchAlerts() {
       firing: [],
       pending: [],
       error: e.message,
-      hint: '需要 port-forward: kubectl -n monitoring port-forward svc/prometheus-prometheus 9090:9090',
+      hint: '请确认 NodePort 可用: http://localhost:30090',
     };
   }
 }
@@ -372,7 +378,7 @@ export async function lokiQuery(logql, { limit = 100, seconds = 3600 } = {}) {
       count: 0,
       lines: [],
       error: e.message,
-      hint: '需要 port-forward: kubectl -n monitoring port-forward svc/loki-gateway 3100:80',
+      hint: '请确认 NodePort 可用: http://localhost:30212',
     };
   }
 }
