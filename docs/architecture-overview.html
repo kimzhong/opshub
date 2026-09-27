@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>kind-ops-mgmt 可观测平台总览</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", -apple-system, "Segoe UI", sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 28px 32px;
+    width: 1600px;
+  }
+  .head { display:flex; align-items:flex-end; justify-content:space-between; border-bottom:2px solid #1e293b; padding-bottom:14px; margin-bottom:22px; }
+  .head h1 { font-size: 27px; font-weight: 700; letter-spacing: .5px; }
+  .head h1 span { color:#38bdf8; }
+  .head .sub { font-size: 13px; color:#64748b; margin-top:6px; }
+  .facts { display:flex; gap:9px; }
+  .fact { background:#1e293b; border:1px solid #334155; border-radius:7px; padding:7px 13px; text-align:center; }
+  .fact b { display:block; font-size:16px; color:#38bdf8; }
+  .fact small { font-size:10.5px; color:#94a3b8; }
+
+  /* 访问层 */
+  .layer { margin-bottom: 18px; }
+  .layer-title { font-size: 12px; color:#94a3b8; letter-spacing:2px; margin-bottom:9px; text-transform:uppercase; }
+  .ports { display:grid; grid-template-columns: repeat(6, 1fr); gap:10px; }
+  .port { background:linear-gradient(180deg,#1e293b,#172033); border:1px solid #334155; border-radius:9px; padding:11px 12px; text-align:center; }
+  .port .p { font-size:20px; font-weight:700; color:#4ade80; font-family:Consolas,monospace; }
+  .port .n { font-size:12.5px; color:#e2e8f0; margin-top:3px; font-weight:600; }
+  .port .d { font-size:10.5px; color:#64748b; margin-top:2px; }
+
+  .arrow { text-align:center; color:#475569; font-size:19px; line-height:1; margin:-4px 0 10px; }
+
+  /* 集群 */
+  .cluster { background:#111c33; border:2px solid #1d4ed8; border-radius:13px; padding:16px 18px 18px; }
+  .cluster-head { display:flex; align-items:center; gap:11px; margin-bottom:15px; }
+  .cluster-head .badge { background:#1d4ed8; color:#fff; font-size:11.5px; font-weight:700; padding:4px 11px; border-radius:20px; letter-spacing:.5px; }
+  .cluster-head .name { font-size:17px; font-weight:700; }
+  .cluster-head .meta { font-size:12px; color:#94a3b8; }
+
+  .ns-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:13px; }
+  .ns { background:#0f1a2e; border:1px solid #334155; border-radius:10px; overflow:hidden; }
+  .ns-head { padding:9px 12px; font-size:13.5px; font-weight:700; display:flex; justify-content:space-between; align-items:center; }
+  .ns-head .cnt { font-size:10.5px; font-weight:600; color:#0f172a; background:#94a3b8; border-radius:10px; padding:2px 8px; }
+  .ns.argocd .ns-head  { background:#f59e0b; }
+  .ns.monitoring .ns-head { background:#a78bfa; }
+  .ns.logging .ns-head  { background:#f472b6; }
+  .ns.demo .ns-head    { background:#4ade80; }
+
+  .comp { padding:9px 12px; border-top:1px solid #1e293b; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .comp .cn { font-size:12px; color:#cbd5e1; font-family:Consolas,monospace; }
+  .comp .cv { font-size:10.5px; color:#64748b; text-align:right; white-space:nowrap; }
+  .ok { color:#4ade80; font-weight:700; }
+  .warn { color:#fbbf24; font-weight:700; }
+
+  /* 数据流 */
+  .flow { margin-top: 20px; display:grid; grid-template-columns: 1fr 1fr 1fr; gap:13px; }
+  .flowbox { background:#0f1a2e; border:1px solid #334155; border-radius:10px; padding:12px 14px; }
+  .flowbox h3 { font-size:12.5px; color:#38bdf8; margin-bottom:8px; letter-spacing:.5px; }
+  .flowline { font-size:11.5px; color:#94a3b8; line-height:1.85; font-family:Consolas,monospace; }
+  .flowline em { color:#4ade80; font-style:normal; }
+  .flowline b { color:#fbbf24; font-weight:600; }
+
+  .foot { margin-top:18px; padding-top:12px; border-top:1px solid #1e293b; font-size:11px; color:#64748b; display:flex; justify-content:space-between; }
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div>
+    <h1>kind-ops-mgmt <span>可观测平台</span> · 整体架构</h1>
+    <div class="sub">Kubernetes 多集群演示环境 · 监控 / 日志 / GitOps 一体化</div>
+  </div>
+  <div class="facts">
+    <div class="fact"><b>v1.31.0</b><small>Kubernetes</small></div>
+    <div class="fact"><b>1 + 3</b><small>控制面 + Worker</small></div>
+    <div class="fact"><b>52</b><small>运行中 Pod</small></div>
+    <div class="fact"><b>4</b><small>业务命名空间</small></div>
+  </div>
+</div>
+
+<div class="layer">
+  <div class="layer-title">① 宿主机访问入口（NodePort 直连，无需 port-forward）</div>
+  <div class="ports">
+    <div class="port"><div class="p">31773</div><div class="n">ArgoCD</div><div class="d">GitOps 发布面板</div></div>
+    <div class="port"><div class="p">30300</div><div class="n">Grafana</div><div class="d">统一可视化入口</div></div>
+    <div class="port"><div class="p">30090</div><div class="n">Prometheus</div><div class="d">指标存储与查询</div></div>
+    <div class="port"><div class="p">30093</div><div class="n">Alertmanager</div><div class="d">告警路由与静默</div></div>
+    <div class="port"><div class="p">30212</div><div class="n">Loki</div><div class="d">日志查询 API</div></div>
+    <div class="port"><div class="p">31080</div><div class="n">demo-app</div><div class="d">示例应用 + 指标</div></div>
+  </div>
+</div>
+
+<div class="arrow">▼</div>
+
+<div class="cluster">
+  <div class="cluster-head">
+    <span class="badge">KIND CLUSTER</span>
+    <span class="name">ops-mgmt</span>
+    <span class="meta">ops-mgmt-control-plane · ops-mgmt-worker / worker2 / worker3 &nbsp;|&nbsp; kindnetd CNI &nbsp;|&nbsp; local-path StorageClass</span>
+  </div>
+
+  <div class="ns-grid">
+    <div class="ns argocd">
+      <div class="ns-head"><span>argocd</span><span class="cnt">7 Pods</span></div>
+      <div class="comp"><span class="cn">argocd-server</span><span class="cv"><span class="ok">●</span> :31773</span></div>
+      <div class="comp"><span class="cn">application-controller</span><span class="cv"><span class="ok">●</span> Running</span></div>
+      <div class="comp"><span class="cn">applicationset-controller</span><span class="cv"><span class="ok">●</span> Running</span></div>
+      <div class="comp"><span class="cn">repo-server / redis / dex</span><span class="cv"><span class="ok">●</span> Running</span></div>
+      <div class="comp"><span class="cn">notifications-controller</span><span class="cv"><span class="ok">●</span> Running</span></div>
+    </div>
+
+    <div class="ns monitoring">
+      <div class="ns-head"><span>monitoring</span><span class="cnt">9 Pods</span></div>
+      <div class="comp"><span class="cn">prometheus-grafana</span><span class="cv"><span class="ok">●</span> :30300</span></div>
+      <div class="comp"><span class="cn">prometheus</span><span class="cv"><span class="ok">●</span> :30090</span></div>
+      <div class="comp"><span class="cn">alertmanager</span><span class="cv"><span class="ok">●</span> :30093</span></div>
+      <div class="comp"><span class="cn">node-exporter × 4</span><span class="cv"><span class="ok">●</span> 4 节点</span></div>
+      <div class="comp"><span class="cn">kube-state-metrics</span><span class="cv"><span class="ok">●</span> Running</span></div>
+      <div class="comp"><span class="cn">kube-prometheus-operator</span><span class="cv"><span class="ok">●</span> Running</span></div>
+    </div>
+
+    <div class="ns logging">
+      <div class="ns-head"><span>logging</span><span class="cnt">19 Pods</span></div>
+      <div class="comp"><span class="cn">alloy (DaemonSet)</span><span class="cv"><span class="ok">●</span> 4/4 日志采集</span></div>
+      <div class="comp"><span class="cn">loki-gateway</span><span class="cv"><span class="ok">●</span> :30212</span></div>
+      <div class="comp"><span class="cn">loki-write × 3</span><span class="cv"><span class="ok">●</span> ingester</span></div>
+      <div class="comp"><span class="cn">loki-read × 3</span><span class="cv"><span class="ok">●</span> querier</span></div>
+      <div class="comp"><span class="cn">loki-backend × 3</span><span class="cv"><span class="ok">●</span> compactor</span></div>
+      <div class="comp"><span class="cn">canary / cache × 4</span><span class="cv"><span class="ok">●</span> Running</span></div>
+    </div>
+
+    <div class="ns demo">
+      <div class="ns-head"><span>demo-app</span><span class="cnt">2 Pods</span></div>
+      <div class="comp"><span class="cn">demo-app</span><span class="cv"><span class="ok">●</span> 2/2 Running</span></div>
+      <div class="comp"><span class="cn">Service (NodePort)</span><span class="cv"><span class="ok">●</span> :31080</span></div>
+      <div class="comp"><span class="cn">ServiceMonitor</span><span class="cv"><span class="ok">●</span> 15s 抓取</span></div>
+      <div class="comp"><span class="cn">HPA</span><span class="cv"><span class="ok">●</span> 2 – 6 副本</span></div>
+      <div class="comp"><span class="cn">/metrics · /health</span><span class="cv"><span class="ok">●</span> 可观测</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="flow">
+  <div class="flowbox">
+    <h3>指标链路 Metrics</h3>
+    <div class="flowline">
+      node-exporter <em>→</em> Prometheus (15s)<br>
+      kubelet / cAdvisor <em>→</em> Prometheus<br>
+      kube-state-metrics <em>→</em> Prometheus<br>
+      demo-app <code>/metrics</code> <em>→</em> Prometheus<br>
+      Prometheus <em>→</em> Grafana / Alertmanager
+    </div>
+  </div>
+  <div class="flowbox">
+    <h3>日志链路 Logs</h3>
+    <div class="flowline">
+      /var/log/pods (hostPath)<br>
+      <em>→</em> Alloy DaemonSet × 4<br>
+      <em>→</em> loki-gateway :80<br>
+      <em>→</em> loki-write (ingester)<br>
+      <em>→</em> loki-read (querier)<br>
+      <em>→</em> Grafana Explore
+    </div>
+  </div>
+  <div class="flowbox">
+    <h3>GitOps 链路</h3>
+    <div class="flowline">
+      Git 仓库 <em>→</em> ArgoCD repo-server<br>
+      <em>→</em> application-controller<br>
+      <em>→</em> 集群期望状态<br>
+      <em>→</em> 自动同步 / 差异对比<br>
+      History <em>→</em> 一键回滚
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <div>标签约定：Loki 查询 <code>{namespace="demo-app"}</code> · Prometheus 指标 <code>kube_pod_info</code> / <code>node_cpu_seconds_total</code></div>
+  <div>已验证：33 个抓取目标在线 · 512 条节点指标序列 · 日志 4 命名空间持续入库</div>
+</div>
+
+</body>
+</html>
