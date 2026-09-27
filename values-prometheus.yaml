@@ -1,0 +1,62 @@
+# kube-prometheus-stack values
+# 监控栈：Prometheus + Grafana + Alertmanager + kube-state-metrics + node-exporter
+
+fullnameOverride: prometheus
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    retentionSize: 10GB
+    replicas: 2
+    replicasPath: /data
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          resources:
+            requests:
+              storage: 20Gi
+    ruleSelector: {}
+    ruleSelectorNilUsesHelmValues: false
+    alertmanagerSelector: {}
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    replicas: 2
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          resources:
+            requests:
+              storage: 2Gi
+
+grafana:
+  enabled: true
+  adminPassword: "admin123"
+  defaultDashboardsTimezone: Asia/Shanghai
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClassName: standard
+  service:
+    type: NodePort
+    nodePort: 30300
+
+prometheus-node-exporter:
+  enabled: true
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+
+kube-state-metrics:
+  enabled: true
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists
+
+prometheusOperator:
+  tolerations:
+    - effect: NoSchedule
+      operator: Exists

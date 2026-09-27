@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kind 多集群环境使用手册（截图版）</title>
+<style>
+:root{--bg:#0f1117;--card:#1a1d27;--border:#2d3143;--text:#e2e8f0;--muted:#8892a4;--accent:#60a5fa;--green:#4ade80;--yellow:#fbbf24;--red:#f87171;--purple:#a78bfa}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;line-height:1.7;font-size:15px}
+.wrap{max-width:1100px;margin:0 auto;padding:2rem 1.5rem}
+nav{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--border);padding:.6rem 0;margin-bottom:2rem}
+nav .wrap{display:flex;gap:1.5rem;align-items:center;flex-wrap:wrap}
+nav a{color:var(--muted);text-decoration:none;font-size:.9rem;transition:color .2s}
+nav a:hover{color:var(--accent)}
+nav .logo{font-weight:700;color:var(--accent);font-size:1.1rem}
+h1{font-size:1.9rem;font-weight:800;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.3rem}
+h2{font-size:1.35rem;font-weight:700;color:var(--accent);margin:2.5rem 0 1rem;border-left:4px solid var(--accent);padding-left:.75rem}
+h3{font-size:1.1rem;font-weight:600;color:var(--yellow);margin:1.5rem 0 .6rem}
+p{margin-bottom:.8rem;color:var(--text)}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem;margin:1rem 0}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.2rem;transition:border-color .2s}
+.card:hover{border-color:var(--accent)}
+.card-title{display:flex;align-items:center;gap:.5rem;font-size:1.05rem;font-weight:700;margin-bottom:.5rem}
+.card-title .dot{width:10px;height:10px;border-radius:50%;background:var(--green)}
+.card-title .dot.warn{background:var(--yellow)}
+.card-title .dot.err{background:var(--red)}
+.card-meta{font-size:.85rem;color:var(--muted)}
+.card-meta span{margin-right:1rem}
+.badge{display:inline-block;background:var(--accent);color:#000;font-size:.75rem;font-weight:700;border-radius:20px;padding:.1rem .6rem;margin-top:.4rem}
+.badge.green{background:var(--green);color:#000}
+.badge.yellow{background:var(--yellow);color:#000}
+.step{border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;background:var(--card);position:relative}
+.step-num{position:absolute;top:-12px;left:16px;background:var(--accent);color:#000;font-weight:800;font-size:.8rem;border-radius:20px;padding:.1rem .7rem}
+.step p:last-child{margin-bottom:0}
+pre{background:#000;border:1px solid var(--border);border-radius:8px;padding:1rem;overflow-x:auto;font-size:.88rem;line-height:1.6;margin:.8rem 0;color:#e2e8f0}
+code{font-family:'Cascadia Code','Fira Code',monospace;font-size:.88em;background:#000;padding:.15rem .4rem;border-radius:4px;color:#a5d6ff}
+pre code{background:none;padding:0;color:inherit}
+.cmd{color:#4ade80}
+.comment{color:#6b7280;font-style:italic}
+.arch{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin:1.5rem 0;text-align:center;overflow-x:auto}
+.arch svg{width:100%;max-width:900px}
+.shot{background:#1c1f2e;border:2px dashed var(--purple);border-radius:10px;padding:1rem 1.2rem;margin:1rem 0;position:relative}
+.shot::before{content:'[SCREENSHOT]';position:absolute;top:-11px;left:14px;background:#1c1f2e;color:var(--purple);font-weight:700;font-size:.8rem;padding:0 .5rem}
+.shot p{margin:.3rem 0}
+table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.9rem}
+th{background:var(--card);color:var(--accent);padding:.7rem 1rem;text-align:left;border-bottom:2px solid var(--border);font-weight:700}
+td{padding:.6rem 1rem;border-bottom:1px solid var(--border)}
+tr:hover td{background:#1a1d27}
+.warn{background:#2a2000;border:1px solid var(--yellow);border-radius:8px;padding:.8rem 1rem;margin:.8rem 0;color:var(--yellow)}
+.tip{background:#0a1e0a;border:1px solid var(--green);border-radius:8px;padding:.8rem 1rem;margin:.8rem 0;color:var(--green)}
+.status{display:inline-flex;align-items:center;gap:.4rem;font-size:.85rem}
+.status .s-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.s-ok{background:var(--green)}.s-warn{background:var(--yellow)}.s-err{background:var(--red)}
+hr{border:none;border-top:1px solid var(--border);margin:2rem 0}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.card,.step,.shot{animation:fadeUp .4s ease both}
+.card:nth-child(2){animation-delay:.05s}.card:nth-child(3){animation-delay:.1s}.card:nth-child(4){animation-delay:.15s}.card:nth-child(5){animation-delay:.2s}.card:nth-child(6){animation-delay:.25s}
+</style>
+</head>
+<body>
+<nav><div class="wrap"><span class="logo">Kind Multi-Cluster</span>
+<a href="#start">Environment</a>
+<a href="#arch">Architecture</a>
+<a href="#access">Services</a>
+<a href="#cicd">CI/CD</a>
+<a href="#gitops">GitOps</a>
+<a href="#observe">Observability</a>
+<a href="#fault">Troubleshooting</a>
+<a href="#cheatsheet">Cheatsheet</a>
+</div></nav>
+
+<div class="wrap">
+
+<h1 id="top">Kind Multi-Cluster Environment — User Manual (with Screenshots Guide)</h1>
+<p style="color:var(--muted);font-size:.95rem">
+  DevOps Demo Scenario &bull; End-to-End: CI/CD &rarr; GitOps &rarr; Observability &rarr; Incident Response
+  &nbsp;|&nbsp;
+  <span class="status"><span class="s-dot s-ok"></span>Cluster Online</span>
+</p>
+<hr>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="arch">Architecture Overview</h2>
+<div class="arch">
+<svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg">
+  <rect width="900" height="520" fill="#1a1d27" rx="12"/>
+  <text x="450" y="30" text-anchor="middle" fill="#60a5fa" font-size="16" font-weight="bold" font-family="Segoe UI">Kind Multi-Cluster Architecture</text>
+
+  <!-- Developer -->
+  <rect x="20" y="60" width="110" height="50" rx="8" fill="#2d3143" stroke="#60a5fa" stroke-width="2"/>
+  <text x="75" y="90" text-anchor="middle" fill="#e2e8f0" font-size="13" font-family="Segoe UI">Developer</text>
+
+  <!-- GitLab -->
+  <rect x="170" y="60" width="120" height="50" rx="8" fill="#2d3143" stroke="#fbbf24" stroke-width="2"/>
+  <text x="230" y="90" text-anchor="middle" fill="#fbbf24" font-size="13" font-family="Segoe UI">gitlab.com</text>
+
+  <!-- Arrow dev -> gitlab -->
+  <line x1="130" y1="85" x2="165" y2="85" stroke="#60a5fa" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="148" y="78" text-anchor="middle" fill="#8892a4" font-size="10">git push</text>
+
+  <!-- Runner -->
+  <rect x="330" y="55" width="140" height="60" rx="8" fill="#2d3143" stroke="#a78bfa" stroke-width="2"/>
+  <text x="400" y="80" text-anchor="middle" fill="#a78bfa" font-size="12" font-family="Segoe UI">GitLab Runner</text>
+  <text x="400" y="97" text-anchor="middle" fill="#8892a4" font-size="10">kind-k8s cluster</text>
+  <line x1="290" y1="85" x2="325" y2="85" stroke="#a78bfa" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="308" y="78" text-anchor="middle" fill="#8892a4" font-size="10">CI job</text>
+
+  <!-- ops-mgmt cluster -->
+  <rect x="20" y="145" width="260" height="330" rx="12" fill="#0d1017" stroke="#60a5fa" stroke-width="2"/>
+  <text x="150" y="170" text-anchor="middle" fill="#60a5fa" font-size="13" font-weight="bold" font-family="Segoe UI">ops-mgmt (Mgmt Cluster)</text>
+  <text x="150" y="186" text-anchor="middle" fill="#8892a4" font-size="10">K8s v1.27.3 - 1xCP + 3xWorker</text>
+
+  <!-- ArgoCD -->
+  <rect x="35" y="200" width="100" height="45" rx="6" fill="#2d3143" stroke="#4ade80" stroke-width="1.5"/>
+  <text x="85" y="227" text-anchor="middle" fill="#4ade80" font-size="11">ArgoCD</text>
+
+  <!-- Prometheus stack -->
+  <rect x="145" y="200" width="120" height="45" rx="6" fill="#2d3143" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="205" y="220" text-anchor="middle" fill="#fbbf24" font-size="11">Prometheus</text>
+  <text x="205" y="234" text-anchor="middle" fill="#8892a4" font-size="9">Grafana + Loki</text>
+
+  <!-- Sealed Secrets -->
+  <rect x="35" y="255" width="230" height="40" rx="6" fill="#2d3143" stroke="#f87171" stroke-width="1.5"/>
+  <text x="150" y="280" text-anchor="middle" fill="#f87171" font-size="11">Sealed Secrets</text>
+
+  <!-- GitLab Runner in cluster -->
+  <rect x="35" y="305" width="230" height="40" rx="6" fill="#2d3143" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="150" y="330" text-anchor="middle" fill="#a78bfa" font-size="11">GitLab Runner (registered)</text>
+
+  <!-- Loki -->
+  <rect x="35" y="355" width="230" height="40" rx="6" fill="#2d3143" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="150" y="380" text-anchor="middle" fill="#60a5fa" font-size="11">Loki Log Aggregation</text>
+
+  <!-- Alertmanager -->
+  <rect x="35" y="405" width="230" height="40" rx="6" fill="#2d3143" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="150" y="430" text-anchor="middle" fill="#fbbf24" font-size="11">Alertmanager</text>
+
+  <!-- biz-prod-a -->
+  <rect x="300" y="145" width="200" height="140" rx="12" fill="#0d1017" stroke="#4ade80" stroke-width="2"/>
+  <text x="400" y="170" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="bold" font-family="Segoe UI">biz-prod-regiona</text>
+  <text x="400" y="186" text-anchor="middle" fill="#8892a4" font-size="10">K8s v1.27.3 - 1xCP + 2xWorker</text>
+  <rect x="315" y="200" width="170" height="35" rx="6" fill="#2d3143" stroke="#4ade80" stroke-width="1"/>
+  <text x="400" y="222" text-anchor="middle" fill="#4ade80" font-size="11">Worker Pods</text>
+  <text x="400" y="250" text-anchor="middle" fill="#8892a4" font-size="10">Production Workload</text>
+  <text x="400" y="266" text-anchor="middle" fill="#8892a4" font-size="10">HPA Auto-scaling</text>
+
+  <!-- biz-prod-b -->
+  <rect x="520" y="145" width="200" height="140" rx="12" fill="#0d1017" stroke="#4ade80" stroke-width="2"/>
+  <text x="620" y="170" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="bold" font-family="Segoe UI">biz-prod-regionb</text>
+  <text x="620" y="186" text-anchor="middle" fill="#8892a4" font-size="10">K8s v1.27.3 - 1xCP + 2xWorker</text>
+  <rect x="535" y="200" width="170" height="35" rx="6" fill="#2d3143" stroke="#4ade80" stroke-width="1"/>
+  <text x="620" y="222" text-anchor="middle" fill="#4ade80" font-size="11">Worker Pods</text>
+  <text x="620" y="250" text-anchor="middle" fill="#8892a4" font-size="10">Cross-Region DR</text>
+
+  <!-- ArgoCD sync arrows -->
+  <line x1="135" y1="222" x2="300" y2="200" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr2)"/>
+  <line x1="135" y1="222" x2="520" y2="200" stroke="#4ade80" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr2)"/>
+  <text x="220" y="205" text-anchor="middle" fill="#4ade80" font-size="10">GitOps Sync</text>
+
+  <!-- Feishu -->
+  <rect x="740" y="60" width="140" height="50" rx="8" fill="#2d3143" stroke="#60a5fa" stroke-width="2"/>
+  <text x="810" y="90" text-anchor="middle" fill="#60a5fa" font-size="13" font-family="Segoe UI">Feishu Docs</text>
+
+  <!-- Alert -> Feishu -->
+  <line x1="150" y1="425" x2="810" y2="85" stroke="#fbbf24" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="480" y="250" text-anchor="middle" fill="#fbbf24" font-size="10">Alert Notification</text>
+
+  <!-- Legends -->
+  <text x="750" y="170" text-anchor="middle" fill="#8892a4" font-size="11" font-weight="bold">Legend</text>
+  <line x1="750" y1="190" x2="780" y2="190" stroke="#4ade80" stroke-width="2"/><text x="790" y="194" fill="#4ade80" font-size="10">GitOps Sync</text>
+  <line x1="750" y1="210" x2="780" y2="210" stroke="#60a5fa" stroke-width="2" stroke-dasharray="4,2"/><text x="790" y="214" fill="#60a5fa" font-size="10">CI/CD Pipeline</text>
+  <line x1="750" y1="230" x2="780" y2="230" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4,2"/><text x="790" y="234" fill="#fbbf24" font-size="10">Monitor/Alert</text>
+
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#60a5fa"/></marker>
+    <marker id="arr2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#4ade80"/></marker>
+  </defs>
+</svg>
+</div>
+
+<table>
+<tr><th>Component</th><th>Namespace</th><th>Access URL</th><th>Credentials</th></tr>
+<tr><td>ArgoCD</td><td>argocd</td><td><a href="http://localhost:30080">http://localhost:30080</a></td><td>admin / wG0YYYIbLXX31dVf</td></tr>
+<tr><td>Grafana</td><td>monitoring</td><td><a href="http://localhost:30300">http://localhost:30300</a></td><td>admin / admin123</td></tr>
+<tr><td>Prometheus</td><td>monitoring</td><td>port-forward 9090</td><td>--</td></tr>
+<tr><td>Loki</td><td>monitoring</td><td>port-forward 3100</td><td>--</td></tr>
+<tr><td>Alertmanager</td><td>monitoring</td><td>port-forward 9093</td><td>--</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="start">1. Environment Startup</h2>
+
+<div class="step"><div class="step-num">1</div>
+<p><strong>First Start</strong> — Double-click <code>C:\Users\kim\kind-env\kind-env-start.bat</code> (run as admin recommended)</p>
+<p>Wait 2-3 minutes until you see <span class="cmd">kind clusters ready</span>.</p>
+</div>
+
+<div class="step"><div class="step-num">2</div>
+<p><strong>Verify Cluster Status</strong>:</p>
+<pre><code class="cmd">wsl -d Ubuntu kubectl --context kind-ops-mgmt get nodes
+wsl -d Ubuntu kubectl --context kind-ops-mgmt get pods -n monitoring
+wsl -d Ubuntu kubectl --context kind-ops-mgmt get pods -n argocd</code></pre>
+</div>
+
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Open terminal, run <code>kubectl get nodes</code>, screenshot the 4-node output (1xCP + 3xWorker).</p>
+<p><strong>[SCREENSHOT]</strong> Run <code>kubectl get pods -n monitoring</code>, screenshot the running pods list.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="access">2. Service Access Guide</h2>
+
+<h3>2.1 ArgoCD (GitOps Dashboard)</h3>
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Steps:</p>
+<p>1. Browser: <a href="http://localhost:30080">http://localhost:30080</a></p>
+<p>2. Username: <code>admin</code>, Password: <code>wG0YYYIbLXX31dVf</code></p>
+<p>3. Screenshot the logged-in Applications page (shows demo-app)</p>
+<p>4. Click demo-app -> Sync -> Screenshot the Sync status page</p>
+<p>5. Click History -> Screenshot the revision history list</p>
+</div>
+<pre><code class="cmd"># View app list
+Applications -> left sidebar
+
+# Manual sync
+Click app name -> Sync -> Synchronize
+
+# View diff
+Diff tab
+
+# Rollback
+History -> select revision -> Rollback</code></pre>
+
+<h3>2.2 Grafana (Monitoring + Logs)</h3>
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Steps:</p>
+<p>1. Open <a href="http://localhost:30300">http://localhost:30300</a>, login admin/admin123</p>
+<p>2. Dashboards -> Browse -> search "Kubernetes" -> open Pod dashboard</p>
+<p>3. Explore -> Prometheus -> type <code>up</code> -> Run query -> screenshot results</p>
+<p>4. Explore -> Loki -> type <code>{namespace="monitoring"}</code> -> screenshot log view</p>
+</div>
+<pre><code class="cmd"># Prometheus query examples
+up{job="demo-app"}                       # Pod status
+rate(http_requests_total[5m])           # QPS
+container_cpu_usage_seconds_total        # CPU usage
+container_memory_working_set_bytes      # Memory usage
+kube_pod_restart_total{namespace="demo-app"}  # Restarts
+
+# Loki query
+{namespace="demo-app"}                   # App logs
+{namespace="demo-app"} |= "ERROR"      # Error logs</code></pre>
+
+<h3>2.3 Prometheus + Alertmanager</h3>
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Run the port-forward command, visit localhost:9090, screenshot the Alerts page.</p>
+</div>
+<pre><code class="cmd"># Prometheus
+wsl -d Ubuntu kubectl --context kind-ops-mgmt -n monitoring \
+  port-forward svc/prometheus-prometheus 9090:9090
+# Browser: http://localhost:9090
+
+# Alertmanager
+wsl -d Ubuntu kubectl --context kind-ops-mgmt -n monitoring \
+  port-forward svc/prometheus-alertmanager 9093:9093
+# Browser: http://localhost:9093</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cicd">3. End-to-End CI/CD Pipeline</h2>
+
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Full pipeline screenshots (requires your GitLab UI):</p>
+<p>1. GitLab -> CI/CD -> Pipelines -> open a successful pipeline run</p>
+<p>2. Screenshot the full pipeline view (build -> test -> scan -> deploy stages)</p>
+<p>3. Click a job -> screenshot the job log output</p>
+<p>4. Deploy production stage -> screenshot the "Play" button</p>
+</div>
+
+<div class="step"><div class="step-num">1</div>
+<p>Create a GitLab project and push <code>demo-app</code> code to <code>https://gitlab.com/your-username/demo-app.git</code></p>
+</div>
+<div class="step"><div class="step-num">2</div>
+<p>Configure CI/CD Variables (Settings -> CI/CD -> Variables -> Add variable):</p>
+<table>
+<tr><th>Variable</th><th>Description</th></tr>
+<tr><td><code>KUBECONFIG_DATA</code></td><td>base64-encoded ops-mgmt kubeconfig</td></tr>
+<tr><td><code>CI_REGISTRY_USER</code></td><td>Your GitLab username</td></tr>
+<tr><td><code>CI_REGISTRY_PASSWORD</code></td><td>GitLab Access Token (with read_registry scope)</td></tr>
+</table>
+<pre><code class="cmd"># Generate KUBECONFIG_DATA
+wsl -d Ubuntu kubectl --context kind-ops-mgmt config view --raw | base64 -w 0</code></pre>
+</div>
+<div class="step"><div class="step-num">3</div>
+<p>Trigger Pipeline: CI/CD -> Pipelines -> Run pipeline (branch: main)</p>
+</div>
+<div class="step"><div class="step-num">4</div>
+<p>Pipeline stages: <code>build</code> -> <code>test-unit</code> -> <code>security-scan</code> -> <code>deploy-production</code> (requires manual trigger)</p>
+</div>
+<div class="step"><div class="step-num">5</div>
+<p>Verify deployment:</p>
+<pre><code class="cmd">wsl -d Ubuntu kubectl --context kind-ops-mgmt get pods -n demo-app
+wsl -d Ubuntu kubectl --context kind-ops-mgmt get hpa -n demo-app
+wsl -d Ubuntu kubectl --context kind-ops-mgmt top pod -n demo-app</code></pre>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="gitops">4. GitOps Demo (ArgoCD)</h2>
+
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Steps:</p>
+<p>1. ArgoCD UI -> Applications -> screenshot full app list (Health/Sync status)</p>
+<p>2. Click demo-app -> Sync -> screenshot the Diff view (shows Git vs cluster diff)</p>
+<p>3. History tab -> screenshot revision history</p>
+<p>4. Modify Git code -> git push -> wait 3 min -> screenshot ArgoCD auto-sync</p>
+</div>
+<pre><code class="cmd"># Deploy ArgoCD Application
+wsl -d Ubuntu kubectl --context kind-ops-mgmt apply -n argocd \
+  -f C:\Users\kim\kind-env\demo-app\argocd\app.yaml
+
+# View sync status
+argocd app list
+argocd app get demo-app
+argocd app sync demo-app    # Manual trigger
+
+# Note: Replace repo URL in app.yaml with your actual GitLab repo</code></pre>
+
+<p><strong>GitOps Rollback Demo Flow:</strong></p>
+<div class="step"><div class="step-num">1</div>Modify <code>deployment.yaml</code> image version in Git -> git push</div>
+<div class="step"><div class="step-num">2</div>ArgoCD auto-detects change (default 3-min poll)</div>
+<div class="step"><div class="step-num">3</div>Auto-syncs to cluster (no manual action needed)</div>
+<div class="step"><div class="step-num">4</div>To rollback: ArgoCD -> demo-app -> History -> select revision -> Rollback</div>
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="observe">5. Observability Setup</h2>
+
+<h3>5.1 Add Loki Data Source</h3>
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Grafana -> Configuration -> Data Sources -> Add data source -> Loki -> fill URL and X-Scope-OrgID header.</p>
+</div>
+<pre><code class="cmd">Grafana -> Configuration -> Data Sources -> Add data source -> Loki
+
+URL:     http://loki-gateway.monitoring.svc.cluster.local
+Header:  X-Scope-OrgID = foo
+
+Click Save & test</code></pre>
+
+<h3>5.2 Configure Feishu Alert Notifications</h3>
+<div class="warn">Requires: Feishu group bot Webhook URL (Feishu group -> Settings -> Group bots -> Add custom bot)</div>
+<pre><code class="cmd"># Create alert Secret
+kubectl --context kind-ops-mgmt create secret generic alertmanager-config \
+  -n monitoring --from-file=alertmanager.yaml=./k8s/alertmanager-config.yaml</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="fault">6. Incident Response</h2>
+
+<div class="shot">
+<p><strong>[SCREENSHOT]</strong> Run each troubleshooting command and screenshot terminal output (highlight ERROR/WARNING lines).</p>
+</div>
+
+<table>
+<tr><th>Symptom</th><th>Command</th></tr>
+<tr><td>Pod not Running</td><td><code>kubectl describe pod &lt;name&gt; -n &lt;ns&gt;</code></td></tr>
+<tr><td>App unreachable</td><td><code>kubectl logs &lt;pod&gt; -n demo-app --tail=50</code></td></tr>
+<tr><td>Pod crash-looping</td><td><code>kubectl logs &lt;pod&gt; -n demo-app --previous</code></td></tr>
+<tr><td>Resource pressure</td><td><code>kubectl top pod -n demo-app</code></td></tr>
+<tr><td>Rebuild ArgoCD</td><td><code>kubectl delete namespace argocd && kubectl apply -n argocd -f &lt;url&gt;</code></td></tr>
+<tr><td>Rebuild monitoring</td><td><code>helm upgrade --install prometheus ... -f values-prometheus.yaml</code></td></tr>
+</table>
+
+<pre><code class="cmd"># Full environment rebuild
+wsl -d Ubuntu kind delete clusters --all
+C:\Users\kim\kind-env\kind-env-start.bat</code></pre>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2 id="cheatsheet">7. Quick Reference</h2>
+
+<div class="grid">
+<div class="card"><div class="card-title"><span class="dot ok"></span>Monitoring</div><div class="card-meta"><span>NS: monitoring</span></div><span class="badge green">Active</span></div>
+<div class="card"><div class="card-title"><span class="dot ok"></span>ArgoCD</div><div class="card-meta"><span>NS: argocd</span></div><span class="badge green">Active</span></div>
+<div class="card"><div class="card-title"><span class="dot warn"></span>GitLab Runner</div><div class="card-meta"><span>NS: gitlab-runner</span></div><span class="badge yellow">Pending Token</span></div>
+<div class="card"><div class="card-title"><span class="dot ok"></span>Loki</div><div class="card-meta"><span>NS: monitoring</span></div><span class="badge green">Active</span></div>
+<div class="card"><div class="card-title"><span class="dot ok"></span>Sealed Secrets</div><div class="card-meta"><span>NS: kube-system</span></div><span class="badge green">Active</span></div>
+</div>
+
+<pre><code class="cmd"># Cluster ops
+wsl -d Ubuntu kind get clusters
+wsl -d Ubuntu kubectl --context kind-ops-mgmt get nodes
+wsl -d Ubuntu kubectl --context kind-ops-mgmt get pods -A
+
+# Context switching
+wsl -d Ubuntu kubectl config use-context kind-ops-mgmt
+wsl -d Ubuntu kubectl config use-context kind-biz-prod-regiona
+wsl -d Ubuntu kubectl config use-context kind-biz-prod-regionb
+
+# Port forwards
+wsl -d Ubuntu kubectl --context kind-ops-mgmt -n monitoring \
+  port-forward svc/prometheus-grafana 30300:80
+wsl -d Ubuntu kubectl --context kind-ops-mgmt -n argocd \
+  port-forward svc/argocd-server 30080:443
+
+# Resource usage
+wsl -d Ubuntu helm list -A
+wsl -d Ubuntu kubectl top nodes
+wsl -d Ubuntu kubectl --context kind-ops-mgmt top pod -n demo-app</code></pre>
+
+<table>
+<tr><th>Parameter</th><th>Value</th></tr>
+<tr><td>K8s Version</td><td>v1.27.3</td></tr>
+<tr><td>ArgoCD UI</td><td>http://localhost:30080</td></tr>
+<tr><td>Grafana</td><td>http://localhost:30300</td></tr>
+<tr><td>ArgoCD Password</td><td>wG0YYYIbLXX31dVf</td></tr>
+<tr><td>Grafana Password</td><td>admin / admin123</td></tr>
+<tr><td>StorageClass</td><td>standard (rancher.io/local-path)</td></tr>
+</table>
+
+<div class="tip" style="margin-top:2rem">
+Feishu Docs (pushed):<br>
+<a href="https://my.feishu.cn/docx/KyfgdKymPokFgzxT6Ljc3auGnpg">User Manual</a> (KyfgdKymPokFgzxT6Ljc3auGnpg)<br>
+<a href="https://my.feishu.cn/docx/CNwudFGMnocYvRxjLngcFGaYnFh">Fault Scenarios</a> (CNwudFGMnocYvRxjLngcFGaYnFh)
+</div>
+
+</div><!-- wrap -->
+</body>
+</html>

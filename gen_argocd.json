@@ -1,0 +1,9 @@
+{
+  "requests": [
+    {
+      "prompt": "A realistic screenshot of ArgoCD web UI dashboard showing GitOps application list. Dark theme with purple/indigo accent colors. Left sidebar with menu items: Applications, Applicationsets, Projects, Settings. Main panel shows application list table with columns: Name, Sync Status, Health, Repository, Revision, Last Synced. Shows 2 applications: 'demo-app' with status 'Synced' (green checkmark) and 'Healthy' (green heart icon), destination 'kind-ops-mgmt/default'. Another app 'prometheus' also Synced and Healthy. Top bar shows 'ArgoCD' logo, search bar, and user avatar. Top right: 'Sync All' and 'Refresh' buttons. Time shows approximately. Authentic ArgoCD professional UI with clean table rows, proper spacing, dark mode styling. DevOps GitOps dashboard screenshot.",
+      "aspect_ratio": "16:9",
+      "resolution": "1280x720"
+    }
+  ]
+}

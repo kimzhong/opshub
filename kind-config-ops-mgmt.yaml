@@ -1,0 +1,42 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ops-mgmt
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+      - containerPort: 30443
+        hostPort: 30443
+        protocol: TCP
+      - containerPort: 30090
+        hostPort: 30090
+        protocol: TCP
+      - containerPort: 30093
+        hostPort: 30093
+        protocol: TCP
+      - containerPort: 30212
+        hostPort: 30212
+        protocol: TCP
+      - containerPort: 30300
+        hostPort: 30300
+        protocol: TCP
+      - containerPort: 31080
+        hostPort: 31080
+        protocol: TCP
+      - containerPort: 31773
+        hostPort: 31773
+        protocol: TCP
+      - containerPort: 32409
+        hostPort: 32409
+        protocol: TCP
+  - role: worker
+  - role: worker
+  - role: worker

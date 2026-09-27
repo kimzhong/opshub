@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kind 多集群运维平台</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- ═══════════════ Header ═══════════════ -->
+<header class="app-header">
+  <div class="logo">
+    <span class="mark">⚙️</span> Kind Ops <span class="mark">Portal</span>
+  </div>
+  <div class="hdr-right">
+    <span class="badge badge-neutral" id="proxy-badge">
+      <span class="badge-dot"></span> <span id="proxy-text">连接中</span>
+    </span>
+    <span class="badge badge-neutral" id="uptime-badge" title="服务已运行时间"></span>
+    <button class="btn btn-sm" id="btn-refresh" title="手动刷新 (R)">↻ 刷新</button>
+    <button class="btn btn-sm" id="btn-auto" title="自动刷新开关">⏸ 暂停</button>
+  </div>
+</header>
+
+<!-- ═══════════════ Nav ═══════════════ -->
+<nav class="app-nav" id="nav">
+  <button class="nav-item active" data-page="overview">📊 概览</button>
+  <button class="nav-item" data-page="clusters">🖥️ 集群</button>
+  <button class="nav-item" data-page="pods">📦 Pods</button>
+  <button class="nav-item" data-page="gitops">🔄 GitOps</button>
+  <button class="nav-item" data-page="logs">📋 日志</button>
+  <button class="nav-item" data-page="alerts">🚨 告警<span class="count hidden" id="alert-count">0</span></button>
+  <button class="nav-item" data-page="terminal">💻 终端</button>
+  <button class="nav-item" data-page="tools">🔗 工具</button>
+</nav>
+
+<!-- ═══════════════ 代理离线横幅 ═══════════════ -->
+<div class="page" id="banner-offline" style="padding:0 24px;">
+  <div class="notice notice-err mt16">
+    <span class="notice-icon">⚠️</span>
+    <div>
+      <strong>后端服务未连接</strong><br>
+      请在终端运行：<code>cd C:\Users\kim\kind-env\ops-portal &amp;&amp; npm start</code>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 概览
+═══════════════════════════════════════════════ -->
+<section class="page active" id="page-overview">
+  <div class="grid g4 mb16">
+    <div class="card"><div class="metric">
+      <div class="metric-value ok" id="m-nodes">—</div>
+      <div class="metric-label">Ready 节点</div>
+      <div class="metric-sub" id="m-nodes-sub">— / —</div>
+    </div></div>
+    <div class="card"><div class="metric">
+      <div class="metric-value info" id="m-pods">—</div>
+      <div class="metric-label">运行 Pods</div>
+      <div class="metric-sub" id="m-pods-sub">全集群合计</div>
+    </div></div>
+    <div class="card"><div class="metric">
+      <div class="metric-value ok" id="m-alerts">—</div>
+      <div class="metric-label">活跃告警</div>
+      <div class="metric-sub" id="m-alerts-sub">Prometheus</div>
+    </div></div>
+    <div class="card"><div class="metric">
+      <div class="metric-value ok" id="m-apps">—</div>
+      <div class="metric-label">GitOps 应用</div>
+      <div class="metric-sub" id="m-apps-sub">ArgoCD</div>
+    </div></div>
+  </div>
+
+  <div class="page-head">
+    <div class="page-title">集群状态</div>
+    <div class="page-desc">点击卡片查看该集群的命名空间与 Pod 分布</div>
+  </div>
+  <div class="grid g3 mb16" id="cluster-cards">
+    <div class="empty">加载中…</div>
+  </div>
+
+  <div class="grid g2">
+    <div class="card">
+      <div class="card-head">
+        <span>🚨 最近告警</span>
+        <button class="btn btn-sm" data-goto="alerts">全部 →</button>
+      </div>
+      <div class="card-body flush" id="overview-alerts">
+        <div class="empty">加载中…</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <span>⚡ 最近操作</span>
+        <span class="small dim" id="overview-events-count"></span>
+      </div>
+      <div class="card-body" id="overview-events">
+        <div class="empty">还没有操作记录</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 集群
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-clusters">
+  <div class="page-head">
+    <div class="page-title">集群详情</div>
+    <div class="page-desc">选择集群查看节点规格与命名空间 Pod 分布</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <label>集群</label>
+      <select id="cluster-select"></select>
+    </div>
+    <div class="spacer"></div>
+    <span class="small dim" id="cluster-fresh"></span>
+  </div>
+
+  <div class="grid g2 mb16">
+    <div class="card">
+      <div class="card-head">节点</div>
+      <div class="card-body" id="cluster-nodes"><div class="empty">选择集群</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head">命名空间 Pod 分布</div>
+      <div class="card-body flush" id="cluster-ns"><div class="empty">选择集群</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">Helm Releases</div>
+    <div class="card-body flush" id="cluster-helm"><div class="empty">加载中…</div></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: Pods
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-pods">
+  <div class="page-head">
+    <div class="page-title">Pod 列表</div>
+    <div class="page-desc">实时查询任意集群任意命名空间的 Pod 状态</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <label>集群</label>
+      <select id="pods-cluster"></select>
+    </div>
+    <div class="toolbar-group">
+      <label>命名空间</label>
+      <select id="pods-namespace"></select>
+    </div>
+    <button class="btn btn-sm btn-primary" id="btn-load-pods">查询</button>
+    <div class="spacer"></div>
+    <span class="small dim" id="pods-summary"></span>
+  </div>
+
+  <div class="card mb16">
+    <div class="card-head">
+      <span>Pods</span>
+      <div class="flex gap6">
+        <button class="btn btn-sm" id="btn-scale-up" title="扩容 demo-app 到 3 副本">📈 扩容</button>
+        <button class="btn btn-sm" id="btn-scale-down" title="缩容 demo-app 到 1 副本">📉 缩容</button>
+        <button class="btn btn-sm" id="btn-restart" title="滚动重启 demo-app">🔁 重启</button>
+      </div>
+    </div>
+    <div class="card-body flush" id="pods-list">
+      <div class="empty">选择集群和命名空间后点击"查询"</div>
+    </div>
+  </div>
+
+  <div class="card hidden" id="hpa-card">
+    <div class="card-head">HPA 自动扩缩容</div>
+    <div class="card-body flush" id="hpa-list"></div>
+  </div>
+
+  <div class="card hidden" id="svc-card">
+    <div class="card-head">Services</div>
+    <div class="card-body flush" id="svc-list"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: GitOps
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-gitops">
+  <div class="page-head">
+    <div class="page-title">GitOps · ArgoCD</div>
+    <div class="page-desc">应用同步状态与一键操作</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <label>集群</label>
+      <select id="gitops-cluster"></select>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn btn-sm" id="btn-argocd-refresh">↻ 刷新</button>
+    <button class="btn btn-sm btn-primary" id="btn-argocd-sync-all">🔄 同步全部</button>
+  </div>
+
+  <div id="gitops-apps">
+    <div class="empty">加载中…</div>
+  </div>
+
+  <div class="card mt16">
+    <div class="card-head">GitOps 操作</div>
+    <div class="card-body">
+      <div class="actions">
+        <button class="action" data-action="sync">
+          <span class="action-icon">🔄</span>
+          <div class="action-body">
+            <div class="action-title">同步应用</div>
+            <div class="action-desc">argocd app sync</div>
+          </div>
+        </button>
+        <button class="action" data-action="restart">
+          <span class="action-icon">🔁</span>
+          <div class="action-body">
+            <div class="action-title">滚动重启</div>
+            <div class="action-desc">rollout restart</div>
+          </div>
+        </button>
+        <button class="action" data-action="history">
+          <span class="action-icon">📜</span>
+          <div class="action-body">
+            <div class="action-title">同步历史</div>
+            <div class="action-desc">revision 列表</div>
+          </div>
+        </button>
+        <button class="action" data-action="diff">
+          <span class="action-icon">🔍</span>
+          <div class="action-body">
+            <div class="action-title">查看差异</div>
+            <div class="action-desc">Git vs 集群</div>
+          </div>
+        </button>
+        <button class="action" data-action="open-argocd">
+          <span class="action-icon">🌐</span>
+          <div class="action-body">
+            <div class="action-title">打开 ArgoCD</div>
+            <div class="action-desc">localhost:30080</div>
+          </div>
+        </button>
+        <button class="action" data-action="open-grafana">
+          <span class="action-icon">📈</span>
+          <div class="action-body">
+            <div class="action-title">打开 Grafana</div>
+            <div class="action-desc">localhost:30300</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 日志
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-logs">
+  <div class="page-head">
+    <div class="page-title">日志查询 · Loki</div>
+    <div class="page-desc">LogQL 跨集群日志检索，默认查最近 1 小时</div>
+  </div>
+
+  <div class="card mb16">
+    <div class="card-head">
+      <span>查询</span>
+      <div class="flex gap6">
+        <select id="logs-window" style="width:110px;">
+          <option value="900">最近 15 分钟</option>
+          <option value="3600" selected>最近 1 小时</option>
+          <option value="21600">最近 6 小时</option>
+          <option value="86400">最近 24 小时</option>
+        </select>
+        <select id="logs-limit" style="width:90px;">
+          <option value="50">50 行</option>
+          <option value="100" selected>100 行</option>
+          <option value="300">300 行</option>
+          <option value="1000">1000 行</option>
+        </select>
+        <button class="btn btn-sm btn-primary" id="btn-loki-query">查询</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <input id="loki-input" style="width:100%;font-family:var(--mono);"
+             value='{namespace="demo-app"}' placeholder='{namespace="demo-app"} |= "ERROR"'>
+      <div class="flex gap6 mt8" style="flex-wrap:wrap;">
+        <span class="small dim">快捷：</span>
+        <span class="chip" data-lq='{namespace="demo-app"}'>demo-app 全部</span>
+        <span class="chip" data-lq='{namespace="demo-app"} |= "ERROR"'>demo-app 错误</span>
+        <span class="chip" data-lq='{namespace="demo-app"} |= "WARN"'>demo-app 警告</span>
+        <span class="chip" data-lq='{namespace=~"monitoring|argocd"}'>监控+GitOps</span>
+        <span class="chip" data-lq='{namespace="kube-system"} |= "error"'>系统错误</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <span>结果</span>
+      <span class="small dim" id="logs-summary"></span>
+    </div>
+    <div class="card-body">
+      <div class="log-box" id="loki-output">
+        <div class="empty">输入 LogQL 后点击"查询"</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 告警
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-alerts">
+  <div class="page-head">
+    <div class="page-title">告警中心</div>
+    <div class="page-desc">Prometheus firing 告警 · 飞书 Webhook 消息 · 平台操作事件</div>
+  </div>
+
+  <div class="tabs" id="alert-tabs">
+    <button class="tab active" data-atab="firing">Prometheus 告警</button>
+    <button class="tab" data-atab="webhook">飞书消息</button>
+    <button class="tab" data-atab="events">操作事件</button>
+    <button class="tab" data-atab="config">接入配置</button>
+  </div>
+
+  <div id="atab-firing">
+    <div class="card">
+      <div class="card-head">
+        <span>Firing / Pending</span>
+        <button class="btn btn-sm" id="btn-alerts-refresh">↻ 立即拉取</button>
+      </div>
+      <div class="card-body flush" id="alerts-firing">
+        <div class="empty">加载中…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="atab-webhook" class="hidden">
+    <div class="card">
+      <div class="card-head">
+        <span>飞书 Webhook 收到的消息</span>
+        <span class="small dim" id="webhook-count"></span>
+      </div>
+      <div class="card-body flush" id="alerts-webhook">
+        <div class="empty">暂无消息</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="atab-events" class="hidden">
+    <div class="card">
+      <div class="card-head">平台操作事件</div>
+      <div class="card-body" id="alerts-events">
+        <div class="empty">还没有操作</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="atab-config" class="hidden">
+    <div class="grid g2">
+      <div class="card">
+        <div class="card-head">飞书告警 Webhook</div>
+        <div class="card-body">
+          <p class="small dim mb8">Alertmanager 触发告警时 POST 到这个地址，平台会实时显示：</p>
+          <div class="flex-center gap6 mb12">
+            <code class="chip" id="webhook-url" style="flex:1;">…</code>
+            <button class="btn btn-sm" id="btn-copy-webhook">复制</button>
+          </div>
+          <button class="btn btn-sm" id="btn-test-webhook">🧪 发送测试消息</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">Alertmanager 接收器配置</div>
+        <div class="card-body">
+          <p class="small dim mb8">把下面配置加到 <code>alertmanager-config.yaml</code> 然后 apply：</p>
+          <pre>receivers:
+  - name: feishu
+    webhook_configs:
+      - url: http://&lt;你的IP&gt;:8099/webhook/feishu
+        send_resolved: true
+
+route:
+  receiver: feishu
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 4h</pre>
+          <button class="btn btn-sm btn-primary mt12" id="btn-copy-am">复制配置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt16">
+      <div class="card-head">Prometheus 连接状态</div>
+      <div class="card-body" id="prom-status"><div class="empty">检查中…</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 终端
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-terminal">
+  <div class="page-head">
+    <div class="page-title">交互终端</div>
+    <div class="page-desc">浏览器内直接执行 kubectl，WebSocket 实时回显</div>
+  </div>
+
+  <div class="card mb16">
+    <div class="card-body">
+      <div class="toolbar" style="margin-bottom:0;">
+        <div class="toolbar-group">
+          <label>集群</label>
+          <select id="term-cluster"></select>
+        </div>
+        <div class="toolbar-group">
+          <label>命名空间</label>
+          <select id="term-namespace"></select>
+        </div>
+        <div class="toolbar-group" style="flex:1;min-width:220px;">
+          <label>Pod（留空=自动选第一个 Running）</label>
+          <input id="term-pod" placeholder="demo-app-xxxxx-yyyyy" style="width:100%;">
+        </div>
+        <button class="btn btn-sm btn-primary" id="btn-term-connect">连接</button>
+        <button class="btn btn-sm btn-danger" id="btn-term-disconnect" disabled>断开</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="term-box">
+    <div class="term-head">
+      <span>
+        <span class="badge badge-neutral" id="term-status"><span class="badge-dot"></span> 未连接</span>
+        <span class="small dim mono" id="term-target"></span>
+      </span>
+      <div class="flex gap6">
+        <button class="btn btn-sm" id="btn-term-clear">清屏</button>
+        <span class="small dim">Enter 执行 · Ctrl+C 中断</span>
+      </div>
+    </div>
+    <div class="term-out" id="term-output"></div>
+    <div class="term-in-row">
+      <span class="term-prompt" id="term-prompt">$</span>
+      <input id="term-input" placeholder="kubectl get pods -A" autocomplete="off" spellcheck="false" disabled>
+      <button class="btn btn-sm btn-primary" id="btn-term-send" disabled>执行</button>
+    </div>
+  </div>
+
+  <div class="card mt16">
+    <div class="card-head">一次性命令执行（无状态，更稳）</div>
+    <div class="card-body">
+      <div class="toolbar">
+        <input id="quick-cmd" style="flex:1;font-family:var(--mono);" value="get pods -A" placeholder="get pods -A">
+        <button class="btn btn-sm btn-primary" id="btn-quick-exec">执行</button>
+      </div>
+      <div class="flex gap6" style="flex-wrap:wrap;">
+        <span class="chip" data-qc="get nodes -o wide">节点</span>
+        <span class="chip" data-qc="get pods -A">全部 Pod</span>
+        <span class="chip" data-qc="get events -A --sort-by=.lastTimestamp | tail -30">最近事件</span>
+        <span class="chip" data-qc="top pod -A">资源占用</span>
+        <span class="chip" data-qc="get hpa -A">HPA</span>
+        <span class="chip" data-qc="get applications -n argocd">ArgoCD 应用</span>
+      </div>
+      <pre id="quick-output" class="mt12" style="display:none;"></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PAGE: 工具链接
+═══════════════════════════════════════════════ -->
+<section class="page" id="page-tools">
+  <div class="page-head">
+    <div class="page-title">工具入口</div>
+    <div class="page-desc">所有已部署组件的直达链接与访问凭据</div>
+  </div>
+  <div class="grid g3" id="links-grid"></div>
+</section>
+
+<!-- ═══════════════ Toast ═══════════════ -->
+<div id="toast-host"></div>
+
+<!-- ═══════════════ Modal ═══════════════ -->
+<div class="modal-mask" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span id="modal-title">输出</span>
+      <button class="btn btn-sm" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body"><pre id="modal-body"></pre></div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" id="btn-copy-modal">复制</button>
+      <button class="btn btn-sm btn-primary" id="btn-close-modal">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>

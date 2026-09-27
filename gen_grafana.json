@@ -1,0 +1,9 @@
+{
+  "requests": [
+    {
+      "prompt": "A realistic screenshot of Grafana dark theme dashboard (version 13.x) showing Kubernetes cluster monitoring overview. Dark background (#1D1D1D), left sidebar with navigation menu expanded showing Dashboards, Explore, Alerts. Main area: cluster CPU usage line chart in cyan (#33CCFF), memory usage area chart in orange (#FF9830), network I/O chart in green. Top right: time range selector showing 'Last 6 hours', refresh indicator. Panel showing '26 Pods Running' with green status. Node table showing 3 worker nodes and 1 control-plane all with healthy green indicators. Prometheus / Overview dashboard title at top. Authentic Grafana 13 UI with rounded corners, subtle drop shadows, dark panels, proper spacing. Professional DevOps monitoring screenshot.",
+      "aspect_ratio": "16:9",
+      "resolution": "1280x720"
+    }
+  ]
+}

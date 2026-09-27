@@ -1,0 +1,28 @@
+{
+  "name": "kind-ops-portal",
+  "version": "2.0.0",
+  "description": "Kind 多集群运维平台 — Node.js 代理服务 + 单页前端",
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "install-ws": "npm install ws"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "kubernetes",
+    "kind",
+    "ops",
+    "gitops",
+    "argocd",
+    "prometheus",
+    "loki"
+  ],
+  "license": "MIT"
+}
